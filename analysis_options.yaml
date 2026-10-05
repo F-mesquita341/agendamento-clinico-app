@@ -1,0 +1,18 @@
+# Análise estrita: o que o compilador deixaria passar em silêncio — um
+# `dynamic` escondido num JSON, um tipo inferido errado — vira aviso, e a
+# integração contínua recusa aviso.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - prefer_final_locals
+    - prefer_single_quotes
+    - unawaited_futures

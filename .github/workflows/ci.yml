@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  testes:
+    name: Análise e testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A mesma versão do Flutter da máquina de desenvolvimento: o que passa
+      # aqui é o que passou lá.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.9'
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      # Aviso também reprova: a análise é estrita de propósito.
+      - name: Análise estática
+        run: flutter analyze --fatal-infos
+
+      - name: Testes
+        run: flutter test
