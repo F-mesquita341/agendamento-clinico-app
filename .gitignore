@@ -55,3 +55,6 @@ lib/firebase_options.dart
 android/key.properties
 # Variáveis locais
 .env*
+# Versão 1 da checklist de heurísticas (PDF): fica só na máquina. A versão
+# versionada é docs/checklist-heuristicas.md.
+docs/Checklist_Heuristicas_Nielsen_FrontEnd_1.pdf
