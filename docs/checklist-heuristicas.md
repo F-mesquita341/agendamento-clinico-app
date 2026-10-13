@@ -755,73 +755,73 @@ Os mesmos itens da Parte 1, reorganizados pela tela em que aparecem. Preencha a 
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 7.1 | Sessão salva entre aberturas | E | |
-| 10.7 | Apresentação curta com Pular | D | |
+| 7.1 | Sessão salva entre aberturas | E | ✓ |
+| 10.7 | Apresentação curta com Pular | D | — Etapa 18 |
 
 ### Entrar — Etapa 12
 9 itens · 7 essenciais
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.2 | Botão em estado de processando | E | |
-| 3.10 | Esqueci minha senha visível | E | |
-| 5.5 | Teclado certo e preenchimento automático | E | |
-| 5.6 | Regras de senha visíveis e mostrar senha | E | |
-| 6.8 | Rótulo do campo sempre visível | D | |
-| 7.1 | Sessão salva entre aberturas | E | |
-| 7.8 | Entrar com biometria | D | |
-| 9.3 | Erros do Firebase traduzidos | E | |
-| 9.4 | Erro junto ao campo, dizendo como corrigir | E | |
+| 1.2 | Botão em estado de processando | E | ✓ |
+| 3.10 | Esqueci minha senha visível | E | ✓ |
+| 5.5 | Teclado certo e preenchimento automático | E | ✓ |
+| 5.6 | Regras de senha visíveis e mostrar senha | E | ✓ |
+| 6.8 | Rótulo do campo sempre visível | D | ✓ |
+| 7.1 | Sessão salva entre aberturas | E | ✓ |
+| 7.8 | Entrar com biometria | D | — Etapa 18 |
+| 9.3 | Erros do Firebase traduzidos | E | ✓ |
+| 9.4 | Erro junto ao campo, dizendo como corrigir | E | ✓ |
 
 ### Criar conta — Etapa 12
 7 itens · 6 essenciais
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.2 | Botão em estado de processando | E | |
-| 3.6 | Saída clara, com confirmação se preenchido | E | |
-| 5.5 | Teclado certo e preenchimento automático | E | |
-| 5.6 | Regras de senha visíveis e mostrar senha | E | |
-| 6.8 | Rótulo do campo sempre visível | D | |
-| 9.3 | Erros do Firebase traduzidos | E | |
-| 9.4 | Erro junto ao campo, dizendo como corrigir | E | |
+| 1.2 | Botão em estado de processando | E | ✓ |
+| 3.6 | Saída clara, com confirmação se preenchido | E | ✓ |
+| 5.5 | Teclado certo e preenchimento automático | E | ✓ |
+| 5.6 | Regras de senha visíveis e mostrar senha | E | ✓ |
+| 6.8 | Rótulo do campo sempre visível | D | ✓ |
+| 9.3 | Erros do Firebase traduzidos | E | ✓ |
+| 9.4 | Erro junto ao campo, dizendo como corrigir | E | ✓ |
 
 ### Esqueci a senha — Etapa 12
 5 itens · 5 essenciais
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.2 | Botão em estado de processando | E | |
-| 1.3 | Confirmação de que o e-mail foi enviado | E | |
-| 3.10 | Mesma mensagem exista ou não a conta | E | |
-| 5.5 | Teclado de e-mail e preenchimento automático | E | |
-| 9.3 | Erros do Firebase traduzidos | E | |
+| 1.2 | Botão em estado de processando | E | ✓ |
+| 1.3 | Confirmação de que o e-mail foi enviado | E | ✓ |
+| 3.10 | Mesma mensagem exista ou não a conta | E | ✓ |
+| 5.5 | Teclado de e-mail e preenchimento automático | E | ✓ |
+| 9.3 | Erros do Firebase traduzidos | E | ✓ |
 
 ### Termo — Etapa 12
 4 itens · 3 essenciais
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.1 | Indicador de carregamento ao buscar o termo | E | |
-| 8.9 | Texto longo em tela própria, sem parágrafos enormes | D | |
-| 9.6 | Estados de carregando e erro | E | |
-| 10.4 | Consentimento simples e explícito, caixa desmarcada | E | |
+| 1.1 | Indicador de carregamento ao buscar o termo | E | ✓ |
+| 8.9 | Texto longo em tela própria, sem parágrafos enormes | D | ✓ |
+| 9.6 | Estados de carregando e erro | E | ✓ |
+| 10.4 | Consentimento simples e explícito, caixa desmarcada | E | ✓ |
 
 ### Completar cadastro — Etapa 12
 10 itens · 7 essenciais
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.2 | Botão em estado de processando | E | |
-| 2.4 | Data de nascimento em dd/mm/aaaa | E | |
-| 3.6 | Saída clara, com confirmação se preenchido | E | |
-| 5.4 | Máscara e validação em tempo real (telefone, data) | E | |
-| 5.5 | Teclado certo e preenchimento automático | E | |
-| 5.9 | Opcionais marcados como "(opcional)" | D | |
-| 6.8 | Rótulo do campo sempre visível | D | |
-| 8.7 | Informação não depende só de cor | E | |
-| 9.4 | Erro junto ao campo, inclusive os vindos da API | E | |
-| 9.7 | Foco no primeiro campo com erro | D | |
+| 1.2 | Botão em estado de processando | E | ✓ |
+| 2.4 | Data de nascimento em dd/mm/aaaa | E | ✓ |
+| 3.6 | Saída clara, com confirmação se preenchido | E | ✓ |
+| 5.4 | Máscara e validação em tempo real (telefone, data) | E | ✓ |
+| 5.5 | Teclado certo e preenchimento automático | E | ✓ |
+| 5.9 | Opcionais marcados como "(opcional)" | D | ✓ |
+| 6.8 | Rótulo do campo sempre visível | D | ✓ |
+| 8.7 | Informação não depende só de cor | E | ✓ |
+| 9.4 | Erro junto ao campo, inclusive os vindos da API | E | ✓ |
+| 9.7 | Foco no primeiro campo com erro | D | ✓ |
 
 ### Início — Etapa 16
 4 itens · 2 essenciais
@@ -986,37 +986,37 @@ Os mesmos itens da Parte 1, reorganizados pela tela em que aparecem. Preencha a 
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 3.6 | Saída clara de formulários e diálogos | E | |
-| 5.7 | Confirmar ações destrutivas (sair da conta) | E | |
-| 10.3 | Telefone da clínica a um toque | E | |
-| 10.6 | Perguntas frequentes ("Como funciona") | D | |
+| 3.6 | Saída clara de formulários e diálogos | E | ✓ |
+| 5.7 | Confirmar ações destrutivas (sair da conta) | E | ✓ |
+| 10.3 | Telefone da clínica a um toque | E | — Etapa 18 |
+| 10.6 | Perguntas frequentes ("Como funciona") | D | — Etapa 18 |
 
 ### Todas as telas — passada semanal e Etapa 18
 22 itens · 16 essenciais · 1 NA
 
 | Item | O que conferir | Tipo | Situação |
 |---|---|:-:|:-:|
-| 1.8 | Aviso de sem conexão | D | |
-| 2.1 | Sem termos técnicos na interface | E | |
-| 2.2 | Glossário único de termos | E | |
-| 2.5 | Componentes nativos em pt-BR | E | |
-| 2.8 | Ícones reconhecíveis e com rótulo | D | |
-| 3.8 | Voltar do Android previsível | E | |
-| 4.1 | Tema único, sem cores soltas | E | |
-| 4.2 | Botões padronizados e na mesma posição | E | |
-| 4.4 | Barra de navegação fixa e estável | E | |
-| 4.5 | Escala fixa de espaçamento | E | |
-| 4.6 | Mesmo padrão para sucesso, aviso e erro | E | |
-| 4.7 | Convenções do Android | E | |
-| 4.9 | Uma única família de ícones | D | |
-| 6.9 | Tooltip e rótulo de acessibilidade em ícones | D | |
-| 7.4 | Fluxo de agendamento sem etapas inúteis | E | |
-| 8.1 | Uma ação principal por tela | E | |
-| 8.4 | Contraste mínimo | E | |
-| 8.5 | Área de toque de 48 dp | E | |
-| 8.6 | Funciona com fonte aumentada | E | |
-| 8.9 | Respiro visual e textos curtos | D | |
-| 9.5 | Tentar novamente sem perder dados; prazo de 90 s | E | |
+| 1.8 | Aviso de sem conexão | D | ~ (1) |
+| 2.1 | Sem termos técnicos na interface | E | ✓ |
+| 2.2 | Glossário único de termos | E | ✓ |
+| 2.5 | Componentes nativos em pt-BR | E | ✓ |
+| 2.8 | Ícones reconhecíveis e com rótulo | D | ✓ |
+| 3.8 | Voltar do Android previsível | E | ✓ |
+| 4.1 | Tema único, sem cores soltas | E | ✓ |
+| 4.2 | Botões padronizados e na mesma posição | E | ✓ |
+| 4.4 | Barra de navegação fixa e estável | E | ~ Etapa 16 |
+| 4.5 | Escala fixa de espaçamento | E | ✓ |
+| 4.6 | Mesmo padrão para sucesso, aviso e erro | E | ✓ |
+| 4.7 | Convenções do Android | E | ✓ |
+| 4.9 | Uma única família de ícones | D | ✓ |
+| 6.9 | Tooltip e rótulo de acessibilidade em ícones | D | ✓ |
+| 7.4 | Fluxo de agendamento sem etapas inúteis | E | — Etapa 14 |
+| 8.1 | Uma ação principal por tela | E | ✓ |
+| 8.4 | Contraste mínimo | E | ✓ |
+| 8.5 | Área de toque de 48 dp | E | ✓ |
+| 8.6 | Funciona com fonte aumentada | E | ✓ |
+| 8.9 | Respiro visual e textos curtos | D | ✓ |
+| 9.5 | Tentar novamente sem perder dados; prazo de 90 s | E | ✓ |
 | 9.8 | Erros registrados para depuração | NA | NA |
 
 ### Protótipo Figma (médico e administrador)

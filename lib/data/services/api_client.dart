@@ -26,13 +26,21 @@ class ApiClient {
     required Uri base,
     FonteDeToken? token,
     this.prazo = const Duration(seconds: 90),
+    void Function()? aoPerderSessao,
   })  : _cliente = cliente,
         _base = base,
-        _token = token;
+        _token = token,
+        _aoPerderSessao = aoPerderSessao;
 
   final http.Client _cliente;
   final Uri _base;
   final FonteDeToken? _token;
+
+  /// Chamado quando um pedido autenticado termina em `autenticar` — a sessão
+  /// não serve mais, venha isso da API ou da própria fonte de token. Num lugar
+  /// só, para nenhuma tela precisar lembrar de levar o paciente de volta à
+  /// tela de entrar. O erro continua subindo para quem fez o pedido.
+  final void Function()? _aoPerderSessao;
 
   /// Prazo de cada pedido, do envio ao fim da resposta. Longo de propósito: o
   /// servidor gratuito hiberna depois de 15 minutos parado, e o primeiro
@@ -66,7 +74,12 @@ class ApiClient {
     final pedido = http.Request(metodo, endereco)..headers['Accept'] = 'application/json';
 
     if (autenticado) {
-      final token = await _token?.call(renovar: renovado);
+      final String? token;
+      try {
+        token = await _token?.call(renovar: renovado);
+      } on ErroDaApi catch (erro) {
+        _falhar(erro, autenticado: true);
+      }
       if (token != null) pedido.headers['Authorization'] = 'Bearer $token';
     }
     if (corpo != null) {
@@ -111,6 +124,11 @@ class ApiClient {
     if (erro.acao == AcaoSugerida.renovarToken && autenticado && !renovado) {
       return _enviar(metodo, caminho, consulta: consulta, corpo: corpo, autenticado: true, renovado: true);
     }
+    _falhar(erro, autenticado: autenticado);
+  }
+
+  Never _falhar(ErroDaApi erro, {required bool autenticado}) {
+    if (autenticado && erro.acao == AcaoSugerida.autenticar) _aoPerderSessao?.call();
     throw erro;
   }
 
