@@ -1,10 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/especialidade.dart';
+import '../comum/defeitos.dart';
 
 /// Estado da primeira carga. Depois que a lista apareceu, atualizar não volta
 /// a `carregando`: a lista fica na tela enquanto a nova chega.
@@ -27,8 +26,7 @@ class EspecialidadesViewModel extends ChangeNotifier {
   List<Especialidade> _itens = const [];
   ErroDaApi? _erro;
   ErroDaApi? _erroAoAtualizar;
-  bool _demorando = false;
-  Timer? _aviso;
+  late final _aviso = AvisoDeDemora(espera: esperaAteAvisar, aoMudar: _notificar);
   bool _descartado = false;
 
   EstadoDaCarga get estado => _estado;
@@ -42,23 +40,17 @@ class EspecialidadesViewModel extends ChangeNotifier {
 
   /// A primeira carga passou do tempo de aviso. Não afirma a causa: pode ser
   /// o servidor acordando, pode ser o servidor fora do ar.
-  bool get demorando => _demorando;
+  bool get demorando => _aviso.demorando;
 
   Future<void> carregar() async {
     // Com a lista já na tela, é uma atualização: ela fica onde está.
     final atualizacao = _estado == EstadoDaCarga.pronto;
     _erroAoAtualizar = null;
-    _demorando = false;
+    _aviso.parar();
     if (!atualizacao) {
       _estado = EstadoDaCarga.carregando;
       _erro = null;
-      _aviso?.cancel();
-      _aviso = Timer(esperaAteAvisar, () {
-        if (_estado == EstadoDaCarga.carregando) {
-          _demorando = true;
-          _notificar();
-        }
-      });
+      _aviso.iniciar();
     }
     _notificar();
 
@@ -68,19 +60,10 @@ class EspecialidadesViewModel extends ChangeNotifier {
     } on ErroDaApi catch (erro) {
       _registrarFalha(erro, atualizacao);
     } catch (erro, pilha) {
-      // Rede de segurança: um erro que não veio da API é defeito do
-      // aplicativo. Ele é relatado — nos testes, isso faz o teste cair — e a
-      // tela sai do carregando com uma mensagem, em vez de girar para sempre.
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: erro,
-        stack: pilha,
-        library: 'agendamento_clinico',
-        context: ErrorDescription('ao carregar as especialidades'),
-      ));
+      relatarDefeito(erro, pilha, 'ao carregar as especialidades');
       _registrarFalha(const ErroDaApi.falhaNoAplicativo(), atualizacao);
     } finally {
-      _aviso?.cancel();
-      _demorando = false;
+      _aviso.parar();
       _notificar();
     }
   }
@@ -101,7 +84,7 @@ class EspecialidadesViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _descartado = true;
-    _aviso?.cancel();
+    _aviso.parar();
     super.dispose();
   }
 }

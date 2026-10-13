@@ -22,3 +22,21 @@ List<T> lerLista<T>(
     throw const ErroDaApi.respostaInesperada(200);
   }
 }
+
+/// Lê um recurso embrulhado no próprio nome — `{paciente: {...}}` —, que é a
+/// forma de toda resposta de um recurso só. Mesma regra de [lerLista]:
+/// formato errado vira `RESPOSTA_INESPERADA`.
+T lerObjeto<T>(
+  Object? corpo,
+  String chave,
+  T Function(Map<String, Object?> json) converter,
+) {
+  try {
+    if (corpo is! Map<String, Object?>) throw const FormatException('corpo');
+    final objeto = corpo[chave];
+    if (objeto is! Map<String, Object?>) throw FormatException(chave);
+    return converter(objeto);
+  } on FormatException {
+    throw const ErroDaApi.respostaInesperada(200);
+  }
+}

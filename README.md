@@ -24,7 +24,7 @@ de administrador da clínica são um protótipo no Figma, fora deste repositóri
 | Framework | Flutter 3.38 (Dart 3.10), build Android |
 | Estado | `ChangeNotifier` + `provider` |
 | HTTP | `http` |
-| Autenticação | Firebase Authentication (a partir da Etapa 12) |
+| Autenticação | Firebase Authentication, por e-mail e senha |
 | Notificações | Firebase Cloud Messaging (Etapa 17) |
 
 ## Arquitetura
@@ -34,10 +34,13 @@ Segue o guia oficial de arquitetura do Flutter, que espelha as camadas da API:
 ```
 lib/
   config/              endereço da API e tema
-  data/services/       ApiClient — token, envelope de erro, renovação da sessão
+  data/services/       ApiClient — token, envelope de erro, renovação da sessão —
+                       e a conta no Firebase, atrás de uma interface
   data/repositories/   o que cada tela pede à API, atrás de uma interface
   domain/models/       modelos imutáveis lidos do JSON da API
+  ui/comum/            botões, espaçamento, retorno, carregando e falha
   ui/<funcionalidade>/ tela + view model
+assets/termos/         o texto do termo de consentimento, um arquivo por versão
 ```
 
 As telas não falam com a rede: pedem a um repositório, que pede ao `ApiClient`.
@@ -48,6 +51,19 @@ Por isso cada tela é testada com um repositório em memória, sem servidor.
 português para o paciente — e decide o que fazer pela `acao`, um conjunto
 fechado de seis valores; nunca pelo texto.
 
+**Conta e sessão.** A raiz do aplicativo (`PortaoDaSessao`) escolhe a tela pelo
+estado da sessão: sem sessão, a tela de entrar; com sessão e sem perfil, o termo
+de consentimento e o cadastro; com perfil, o aplicativo. Trocar de área fecha as
+telas abertas por cima, então depois do cadastro voltar não leva ao formulário.
+Qualquer pedido que receba `autenticar` da API leva de volta à tela de entrar,
+dizendo por quê.
+
+**Termo de consentimento.** A API diz qual versão está vigente; o texto mora no
+aplicativo, em `assets/termos/`. O aceite enviado no cadastro é sempre o da
+versão cujo texto foi mostrado. Se a vigente não for uma que o aplicativo tem,
+ele pede para ser atualizado em vez de aceitar um texto que não mostrou. Um
+teste fixa o conteúdo de cada versão: texto novo é versão nova.
+
 **Datas** chegam da API em UTC e passam todas por `instanteDaApi`, que as
 converte para o horário do aparelho. **Dinheiro** é sempre o `valorFormatado`
 que a API manda; o aplicativo não faz conta com valores.
@@ -56,6 +72,20 @@ que a API manda; o aplicativo não faz conta com valores.
 
 Pré-requisitos: Flutter 3.38 e Android SDK (Android Studio traz os dois) e um
 emulador ou aparelho Android.
+
+**Configuração do Firebase.** O arquivo `android/app/google-services.json` fica
+fora do Git: ele aponta para um projeto do Firebase, e quem reproduz o trabalho
+usa o seu. No [console do Firebase](https://console.firebase.google.com):
+
+1. Crie um projeto, ou use um existente, e em **Authentication → Método de
+   login** ative **E-mail/senha**.
+2. Em **Configurações do projeto → Seus apps**, adicione um app **Android** com
+   o nome de pacote `io.github.fmesquita341.agendamento_clinico`.
+3. Baixe o `google-services.json` e salve em `android/app/`.
+
+A API precisa usar o mesmo projeto do Firebase, para aceitar os tokens do
+aplicativo. Sem o arquivo, a análise e os testes rodam normalmente — eles não
+usam o Firebase —, mas a compilação para Android falha.
 
 ```bash
 flutter pub get

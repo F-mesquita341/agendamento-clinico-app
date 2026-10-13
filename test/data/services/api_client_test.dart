@@ -174,6 +174,76 @@ void main() {
     expect(chamadas, 1);
   });
 
+  group('sessão perdida', () {
+    test('autenticar num pedido autenticado avisa uma vez, e o erro continua subindo', () async {
+      var avisos = 0;
+      final api = ApiClient(
+        cliente: MockClient((_) async => json(401, envelope('NAO_AUTENTICADO', 'Faça login.', acao: 'autenticar'))),
+        base: base,
+        token: tokens().fonte,
+        aoPerderSessao: () => avisos++,
+      );
+
+      await expectLater(api.get('/pacientes/me'), throwsA(isA<ErroDaApi>()));
+      expect(avisos, 1);
+    });
+
+    test('a fonte de token também pode dizer que a sessão acabou', () async {
+      var avisos = 0;
+      var pedidos = 0;
+      Future<String?> fonteSemSessao({bool renovar = false}) async => throw const ErroDaApi(
+            status: 401,
+            codigo: 'SESSAO_ENCERRADA',
+            mensagem: 'Sua sessão terminou.',
+            acao: AcaoSugerida.autenticar,
+          );
+      final api = ApiClient(
+        cliente: MockClient((_) async {
+          pedidos++;
+          return json(200, {});
+        }),
+        base: base,
+        token: fonteSemSessao,
+        aoPerderSessao: () => avisos++,
+      );
+
+      await expectLater(api.get('/pacientes/me'), throwsA(isA<ErroDaApi>()));
+      expect(avisos, 1);
+      // Sem token, o pedido nem sai.
+      expect(pedidos, 0);
+    });
+
+    test('sessão expirada que se renova não é sessão perdida', () async {
+      var avisos = 0;
+      var chamadas = 0;
+      final api = ApiClient(
+        cliente: MockClient((_) async => chamadas++ == 0
+            ? json(401, envelope('SESSAO_EXPIRADA', 'Sua sessão expirou.', acao: 'renovar_token'))
+            : json(200, {'ok': true})),
+        base: base,
+        token: tokens().fonte,
+        aoPerderSessao: () => avisos++,
+      );
+
+      await api.get('/pacientes/me');
+      expect(avisos, 0);
+    });
+
+    test('outros erros não avisam', () async {
+      var avisos = 0;
+      final api = ApiClient(
+        cliente: MockClient((_) async => json(404, envelope('PERFIL_NAO_CADASTRADO', 'Complete seu cadastro.',
+            acao: 'completar_cadastro'))),
+        base: base,
+        token: tokens().fonte,
+        aoPerderSessao: () => avisos++,
+      );
+
+      await expectLater(api.get('/pacientes/me'), throwsA(isA<ErroDaApi>()));
+      expect(avisos, 0);
+    });
+  });
+
   test('429 traz quanto esperar, lido do Retry-After', () async {
     final api = ApiClient(
       cliente: MockClient((_) async => json(
