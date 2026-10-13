@@ -134,7 +134,7 @@ class _FormularioDoPacienteScreenState extends State<FormularioDoPacienteScreen>
     return TextFormField(
       controller: _controlador(campo),
       focusNode: _focos[campo],
-      decoration: InputDecoration(labelText: rotulo, hintText: dica, border: const OutlineInputBorder()),
+      decoration: InputDecoration(labelText: rotulo, hintText: dica),
       keyboardType: teclado,
       autofillHints: preenchimento,
       textCapitalization: maiusculas,

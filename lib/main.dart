@@ -13,6 +13,7 @@ import 'data/repositories/repositorio_do_paciente.dart';
 import 'data/services/api_client.dart';
 import 'data/services/autenticacao_firebase.dart';
 import 'data/services/servico_de_autenticacao.dart';
+import 'ui/comum/textos.dart';
 import 'ui/sessao/portao_da_sessao.dart';
 import 'ui/sessao/sessao_view_model.dart';
 
@@ -87,7 +88,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
         ChangeNotifierProvider<SessaoViewModel>.value(value: _sessao),
       ],
       child: MaterialApp(
-        title: 'Agendamento Clínico',
+        title: Textos.nomeDoApp,
         theme: temaDoApp(),
         locale: const Locale('pt', 'BR'),
         supportedLocales: const [Locale('pt', 'BR')],

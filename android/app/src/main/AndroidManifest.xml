@@ -3,7 +3,7 @@
          sem esta linha, o APK de release não alcança a API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Agendamento Clínico"
+        android:label="Marcaí"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

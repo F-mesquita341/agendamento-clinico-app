@@ -8,6 +8,8 @@ import 'package:agendamento_clinico/ui/sessao/portao_da_sessao.dart';
 import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:agendamento_clinico/ui/cadastro/formulario_do_paciente_screen.dart';
+import 'package:agendamento_clinico/ui/comum/marca.dart';
+import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:agendamento_clinico/ui/conta/criar_conta_screen.dart';
 import 'package:agendamento_clinico/ui/conta/entrar_screen.dart';
 import 'package:agendamento_clinico/ui/conta/esqueci_a_senha_screen.dart';
@@ -15,6 +17,7 @@ import 'package:agendamento_clinico/ui/perfil/perfil_screen.dart';
 import 'package:agendamento_clinico/ui/shell/shell_screen.dart';
 import 'package:agendamento_clinico/ui/termo/termo_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -97,9 +100,13 @@ Future<void> sessao(WidgetTester tester, AutenticacaoFalsa autenticacao, Usuario
 }
 
 /// Rola até o botão com este texto — a lista só constrói o que está perto da
-/// tela — e toca nele, e não num título com o mesmo texto.
+/// tela — e toca nele, e não num título com o mesmo texto. Vale também para a
+/// linha que leva a outra tela ("Editar dados", no perfil).
 Future<void> tocar(WidgetTester tester, String texto) async {
-  final botao = find.ancestor(of: find.text(texto), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
+  final botao = find.ancestor(
+    of: find.text(texto),
+    matching: find.byWidgetPredicate((w) => w is ButtonStyleButton || (w is ListTile && w.onTap != null)),
+  );
   await tester.scrollUntilVisible(botao, 300, scrollable: find.byType(Scrollable).first);
   await tester.tap(botao.first);
   await tester.pumpAndSettle();
@@ -108,15 +115,22 @@ Future<void> tocar(WidgetTester tester, String texto) async {
 bool podeVoltar(WidgetTester tester) => tester.state<NavigatorState>(find.byType(Navigator).first).canPop();
 
 void main() {
+  testWidgets('enquanto o provedor não diz se há sessão: a marca e o indicador de espera', (tester) async {
+    await montar(tester, AutenticacaoFalsa(), ApiFalsa());
+
+    expect(find.byType(Marca), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
   testWidgets('o portão em miniatura: criar conta, aceitar o termo, cadastrar, ver o perfil, sair', (tester) async {
     final autenticacao = AutenticacaoFalsa(criarConta: [null]);
     final api = ApiFalsa();
     await montar(tester, autenticacao, api);
-    expect(find.text('Agendamento Clínico'), findsOneWidget);
+    expect(find.byType(Marca), findsOneWidget);
 
-    // Sem sessão: entrar, e dali criar a conta.
+    // Sem sessão: a abertura, e dali criar a conta.
     await sessao(tester, autenticacao, null);
-    expect(find.byType(EntrarScreen), findsOneWidget);
+    expect(find.byType(AberturaScreen), findsOneWidget);
     await tocar(tester, 'Criar conta');
     await tester.enterText(find.widgetWithText(TextFormField, 'E-mail'), 'ana@exemplo.test');
     await tester.enterText(find.widgetWithText(TextFormField, 'Senha'), 'segredo1');
@@ -154,7 +168,91 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Sair da conta'));
     await tester.pumpAndSettle();
     expect(autenticacao.saidas, 1);
-    expect(find.byType(EntrarScreen), findsOneWidget);
+    // Saiu por vontade própria: de volta à abertura, sem aviso nenhum.
+    expect(find.byType(AberturaScreen), findsOneWidget);
+  });
+
+  group('sem sessão', () {
+    Future<void> abrir(WidgetTester tester, AutenticacaoFalsa autenticacao) async {
+      await montar(tester, autenticacao, ApiFalsa());
+      await sessao(tester, autenticacao, null);
+    }
+
+    String emailEmEntrar(WidgetTester tester) => tester
+        .widget<TextField>(find.descendant(
+          of: find.descendant(of: find.byType(EntrarScreen), matching: find.widgetWithText(TextFormField, 'E-mail')),
+          matching: find.byType(TextField),
+        ))
+        .controller!
+        .text;
+
+    testWidgets('sem motivo: a abertura, com os dois caminhos, e não a tela de entrar', (tester) async {
+      await abrir(tester, AutenticacaoFalsa());
+
+      expect(find.byType(AberturaScreen), findsOneWidget);
+      expect(find.byType(EntrarScreen), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Criar conta'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Já tenho conta'), findsOneWidget);
+      // Voltar, na abertura, sai do aplicativo: não há para onde voltar.
+      expect(podeVoltar(tester), isFalse);
+    });
+
+    testWidgets('"Já tenho conta" abre a tela de entrar, e voltar retorna à abertura', (tester) async {
+      await abrir(tester, AutenticacaoFalsa());
+
+      await tocar(tester, 'Já tenho conta');
+      expect(find.byType(EntrarScreen), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(EntrarScreen), findsNothing);
+      expect(find.byType(AberturaScreen), findsOneWidget);
+    });
+
+    testWidgets('criar conta e voltar pelo sistema: fica na abertura', (tester) async {
+      await abrir(tester, AutenticacaoFalsa());
+      await tocar(tester, 'Criar conta');
+      expect(find.byType(CriarContaScreen), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CriarContaScreen), findsNothing);
+      expect(find.byType(EntrarScreen), findsNothing);
+      expect(find.byType(AberturaScreen), findsOneWidget);
+    });
+
+    testWidgets('em criar conta, "Já tenho conta" leva a entrar com o e-mail que estava digitado', (tester) async {
+      await abrir(tester, AutenticacaoFalsa());
+      await tocar(tester, 'Criar conta');
+      await tester.enterText(find.widgetWithText(TextFormField, 'E-mail'), 'ana@exemplo.test');
+      await tester.pump();
+
+      await tocar(tester, 'Já tenho conta');
+      // Havia algo digitado: a pergunta de descartar vem antes (checklist 3.6).
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CriarContaScreen), findsNothing);
+      expect(find.byType(EntrarScreen), findsOneWidget);
+      expect(emailEmEntrar(tester), 'ana@exemplo.test');
+    });
+
+    testWidgets('em criar conta, "Entrar com este e-mail" leva a entrar com ele', (tester) async {
+      final autenticacao = AutenticacaoFalsa(criarConta: [const ErroDeAutenticacao('email-already-in-use')]);
+      await abrir(tester, autenticacao);
+      await tocar(tester, 'Criar conta');
+      await tester.enterText(find.widgetWithText(TextFormField, 'E-mail'), 'ana@exemplo.test');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Senha'), 'segredo1');
+      await tester.pump();
+      await tocar(tester, 'Criar conta');
+
+      await tocar(tester, 'Entrar com este e-mail');
+
+      expect(find.byType(CriarContaScreen), findsNothing);
+      expect(find.byType(EntrarScreen), findsOneWidget);
+      expect(emailEmEntrar(tester), 'ana@exemplo.test');
+    });
   });
 
   testWidgets('portão criado com a sessão já assentada: a primeira troca de área também fecha o que está aberto', (tester) async {
@@ -198,12 +296,15 @@ void main() {
     final autenticacao = AutenticacaoFalsa();
     await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
     await sessao(tester, autenticacao, null);
+    // Duas telas por cima da abertura: entrar, e recuperar a senha.
+    await tocar(tester, 'Já tenho conta');
     await tocar(tester, 'Esqueci minha senha');
     expect(find.byType(EsqueciASenhaScreen), findsOneWidget);
 
     await sessao(tester, autenticacao, ana);
 
     expect(find.byType(EsqueciASenhaScreen), findsNothing);
+    expect(find.byType(EntrarScreen), findsNothing);
     expect(find.byType(ShellScreen), findsOneWidget);
     expect(podeVoltar(tester), isFalse);
   });
@@ -225,6 +326,8 @@ void main() {
     await tocar(tester, 'Salvar alterações');
 
     expect(find.byType(FormularioDoPacienteScreen), findsNothing);
+    // Direto na tela de entrar, e não na abertura: a pessoa já estava dentro.
+    expect(find.byType(AberturaScreen), findsNothing);
     expect(find.byType(EntrarScreen), findsOneWidget);
     expect(find.text('Sua sessão terminou. Entre de novo para continuar.'), findsOneWidget);
     expect(autenticacao.saidas, 1);
@@ -256,6 +359,10 @@ void main() {
     await tester.tap(find.text('Perfil'));
     await tester.pumpAndSettle();
 
+    // No cabeçalho: as iniciais, o nome e o e-mail.
+    expect(find.text('AL'), findsOneWidget);
+    expect(find.text('Ana Lima'), findsOneWidget);
+    expect(find.text('ana@exemplo.test'), findsOneWidget);
     expect(find.text('(88) 99999-0000'), findsOneWidget);
     expect(find.text('15/03/1990'), findsOneWidget);
     expect(find.textContaining('Versão 2026-09-v2, aceita em 06/10/2026'), findsOneWidget);
@@ -288,6 +395,26 @@ void main() {
     // A versão nova não está neste aplicativo: nada de aceitar um texto que
     // não foi mostrado.
     expect(find.text('Atualize o aplicativo'), findsOneWidget);
+  });
+
+  testWidgets('barra de status do Android: ícones claros sobre o fundo escuro, e escuros de volta nas telas claras',
+      (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    api.forcadas['GET /pacientes/me'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+    await montar(tester, autenticacao, api);
+    // A espera inicial tem o fundo na cor principal.
+    expect(SystemChrome.latestStyle!.statusBarIconBrightness, Brightness.light);
+
+    // A falha ao carregar o perfil não tem barra superior, e o fundo é claro.
+    await sessao(tester, autenticacao, ana);
+    expect(find.text('Algo deu errado do nosso lado.'), findsOneWidget);
+    expect(SystemChrome.latestStyle!.statusBarIconBrightness, Brightness.dark);
+
+    // A abertura volta ao fundo escuro.
+    await tocar(tester, 'Sair da conta');
+    expect(find.byType(AberturaScreen), findsOneWidget);
+    expect(SystemChrome.latestStyle!.statusBarIconBrightness, Brightness.light);
   });
 
   testWidgets('falha ao carregar o perfil: tentar de novo, ou sair', (tester) async {
@@ -331,6 +458,21 @@ void main() {
 
     final barra = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(barra.selectedIndex, 0);
+  });
+
+  testWidgets('perfil com o aparelho deitado: nada estoura, e rolando se chega a sair da conta', (tester) async {
+    tester.view.physicalSize = const Size(800, 360);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final autenticacao = AutenticacaoFalsa();
+    await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+    await sessao(tester, autenticacao, ana);
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    await tocar(tester, 'Sair da conta');
+    expect(find.text('Sair da conta?'), findsOneWidget);
   });
 
   testWidgets('perfil: acessibilidade e texto ampliado', (tester) async {

@@ -47,6 +47,32 @@ class BotaoSecundario extends StatelessWidget {
   }
 }
 
+/// Ação que encerra ou desfaz algo — sair da conta, cancelar a consulta. Tem a
+/// cor de erro, e leva o nome da ação (checklist, item 5.7). Pede confirmação
+/// antes: quem chama é que abre o diálogo.
+class BotaoDestrutivo extends StatelessWidget {
+  const BotaoDestrutivo({super.key, required this.rotulo, required this.aoTocar});
+
+  final String rotulo;
+  final VoidCallback? aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: cores.error,
+          side: BorderSide(color: cores.error, width: 1.5),
+        ),
+        onPressed: aoTocar,
+        child: Text(rotulo, textAlign: TextAlign.center),
+      ),
+    );
+  }
+}
+
 /// Ação leve: um link para outra tela ("Esqueci minha senha", "Criar conta").
 class BotaoDeTexto extends StatelessWidget {
   const BotaoDeTexto({super.key, required this.rotulo, required this.aoTocar});

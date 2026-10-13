@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_do_paciente.dart';
 import '../../domain/models/data_civil.dart';
+import '../comum/avatar.dart';
 import '../comum/botoes.dart';
 import '../comum/confirmacao.dart';
 import '../comum/espaco.dart';
@@ -54,7 +55,7 @@ class PerfilScreen extends StatelessWidget {
     final paciente = sessao.paciente;
     // Entre a saída e a troca de tela, não há perfil para mostrar.
     if (paciente == null) return const Scaffold();
-    final estilos = Theme.of(context).textTheme;
+    final tema = Theme.of(context);
     final aceitoEm = paciente.termoAceitoEm;
 
     return Scaffold(
@@ -63,39 +64,61 @@ class PerfilScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(Espaco.margem),
           children: [
-            Text(paciente.nome, style: estilos.headlineSmall),
-            const SizedBox(height: Espaco.medio),
-            _Dado(icone: Icons.mail_outline, rotulo: 'E-mail', valor: paciente.email),
-            _Dado(
-              icone: Icons.phone_outlined,
-              rotulo: 'Telefone',
-              valor: paciente.telefone == null ? 'Não informado' : formatarTelefone(paciente.telefone!),
-            ),
-            _Dado(
-              icone: Icons.cake_outlined,
-              rotulo: 'Data de nascimento',
-              valor: paciente.dataNascimento?.paraTela() ?? 'Não informada',
-            ),
-            _Dado(
-              icone: Icons.description_outlined,
-              rotulo: 'Termo de consentimento',
-              valor: aceitoEm == null
-                  ? 'Versão ${paciente.versaoDoTermo}'
-                  : 'Versão ${paciente.versaoDoTermo}, aceita em ${DataCivil.doInstante(aceitoEm).paraTela()}',
-            ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: BotaoDeTexto(
-                rotulo: 'Ler o termo',
-                aoTocar: () => Navigator.of(context).push<void>(MaterialPageRoute(
-                  builder: (_) => TermoLidoScreen(versao: paciente.versaoDoTermo, lerArquivo: lerArquivo),
-                )),
-              ),
+            Row(
+              children: [
+                AvatarDeIniciais(nome: paciente.nome, tamanho: 64),
+                const SizedBox(width: Espaco.medio),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(paciente.nome, style: tema.textTheme.headlineSmall),
+                      Text(
+                        paciente.email,
+                        style: tema.textTheme.bodyMedium!.copyWith(color: tema.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: Espaco.grande),
-            BotaoPrincipal(rotulo: 'Editar dados', aoTocar: () => _editar(context, sessao)),
-            const SizedBox(height: Espaco.pequeno),
-            BotaoSecundario(rotulo: 'Sair da conta', aoTocar: () => _sair(context, sessao)),
+            _Grupo(
+              children: [
+                _Dado(
+                  icone: Icons.phone_outlined,
+                  rotulo: 'Telefone',
+                  valor: paciente.telefone == null ? 'Não informado' : formatarTelefone(paciente.telefone!),
+                ),
+                _Dado(
+                  icone: Icons.cake_outlined,
+                  rotulo: 'Data de nascimento',
+                  valor: paciente.dataNascimento?.paraTela() ?? 'Não informada',
+                ),
+                _Acao(icone: Icons.edit_outlined, rotulo: 'Editar dados', aoTocar: () => _editar(context, sessao)),
+              ],
+            ),
+            const SizedBox(height: Espaco.medio),
+            _Grupo(
+              children: [
+                _Dado(
+                  icone: Icons.description_outlined,
+                  rotulo: 'Termo de consentimento',
+                  valor: aceitoEm == null
+                      ? 'Versão ${paciente.versaoDoTermo}'
+                      : 'Versão ${paciente.versaoDoTermo}, aceita em ${DataCivil.doInstante(aceitoEm).paraTela()}',
+                ),
+                _Acao(
+                  icone: Icons.article_outlined,
+                  rotulo: 'Ler o termo',
+                  aoTocar: () => Navigator.of(context).push<void>(MaterialPageRoute(
+                    builder: (_) => TermoLidoScreen(versao: paciente.versaoDoTermo, lerArquivo: lerArquivo),
+                  )),
+                ),
+              ],
+            ),
+            const SizedBox(height: Espaco.grande),
+            BotaoDestrutivo(rotulo: 'Sair da conta', aoTocar: () => _sair(context, sessao)),
           ],
         ),
       ),
@@ -103,6 +126,30 @@ class PerfilScreen extends StatelessWidget {
   }
 }
 
+/// Um cartão com linhas separadas por um fio: dados, e a ação sobre eles.
+class _Grupo extends StatelessWidget {
+  const _Grupo({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      // O realce do toque não passa dos cantos arredondados.
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (final (i, linha) in children.indexed) ...[
+            if (i > 0) const Divider(height: 1),
+            linha,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Um dado do cadastro: o que é, em letra menor, e o valor em destaque.
 class _Dado extends StatelessWidget {
   const _Dado({required this.icone, required this.rotulo, required this.valor});
 
@@ -112,11 +159,31 @@ class _Dado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tema = Theme.of(context);
     return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: ExcludeSemantics(child: Icon(icone)),
-      title: Text(rotulo),
-      subtitle: Text(valor),
+      leading: ExcludeSemantics(child: Icon(icone, color: tema.colorScheme.primary)),
+      title: Text(rotulo, style: tema.textTheme.bodySmall!.copyWith(color: tema.colorScheme.onSurfaceVariant)),
+      subtitle: Text(valor, style: tema.textTheme.titleSmall!.copyWith(color: tema.colorScheme.onSurface)),
+    );
+  }
+}
+
+/// Uma linha que leva a outra tela.
+class _Acao extends StatelessWidget {
+  const _Acao({required this.icone, required this.rotulo, required this.aoTocar});
+
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    return ListTile(
+      leading: ExcludeSemantics(child: Icon(icone, color: tema.colorScheme.primary)),
+      title: Text(rotulo, style: tema.textTheme.titleSmall),
+      trailing: const ExcludeSemantics(child: Icon(Icons.chevron_right)),
+      onTap: aoTocar,
     );
   }
 }

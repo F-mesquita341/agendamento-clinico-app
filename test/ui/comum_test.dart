@@ -1,8 +1,10 @@
 import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/ui/comum/botoes.dart';
 import 'package:agendamento_clinico/ui/comum/estados_de_carga.dart';
+import 'package:agendamento_clinico/ui/comum/marca.dart';
 import 'package:agendamento_clinico/ui/comum/retorno.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> montar(WidgetTester tester, Widget corpo) async {
@@ -38,12 +40,40 @@ void main() {
       expect(toques, 1);
     });
 
-    testWidgets('ocupa a largura toda e tem ao menos 48 dp de altura', (tester) async {
+    testWidgets('ocupa a largura toda e tem 56 dp de altura', (tester) async {
       await montar(tester, BotaoPrincipal(rotulo: 'Entrar', aoTocar: () {}));
 
       final tamanho = tester.getSize(find.byType(FilledButton));
       expect(tamanho.width, tester.getSize(find.byType(Scaffold)).width - 32);
-      expect(tamanho.height, greaterThanOrEqualTo(48));
+      expect(tamanho.height, greaterThanOrEqualTo(56));
+    });
+  });
+
+  group('botões secundário e de texto', () {
+    testWidgets('o secundário tem a mesma altura do principal', (tester) async {
+      await montar(tester, BotaoSecundario(rotulo: 'Criar conta', aoTocar: () {}));
+
+      expect(tester.getSize(find.byType(OutlinedButton)).height, greaterThanOrEqualTo(56));
+    });
+
+    testWidgets('o destrutivo tem a cor de erro, no texto e na borda, e a altura dos outros', (tester) async {
+      await montar(tester, BotaoDestrutivo(rotulo: 'Sair da conta', aoTocar: () {}));
+
+      final erro = temaDoApp().colorScheme.error;
+      final estilo = tester.widget<OutlinedButton>(find.byType(OutlinedButton)).style!;
+      expect(estilo.foregroundColor!.resolve({}), erro);
+      expect(estilo.side!.resolve({})!.color, erro);
+      expect(tester.getSize(find.byType(OutlinedButton)).height, greaterThanOrEqualTo(56));
+    });
+
+    testWidgets('o de texto, mesmo com rótulo curto, tem 48 dp também no que se vê', (tester) async {
+      await montar(tester, Align(child: BotaoDeTexto(rotulo: 'Ok', aoTocar: () {})));
+
+      // A área de toque de 48 dp o tema já garante; aqui é a forma visível do
+      // botão — o realce ao tocar — que não fica menor que ela.
+      final forma = tester.getSize(find.descendant(of: find.byType(TextButton), matching: find.byType(Material)));
+      expect(forma.width, greaterThanOrEqualTo(48));
+      expect(forma.height, greaterThanOrEqualTo(48));
     });
   });
 
@@ -72,11 +102,51 @@ void main() {
       });
     }
 
+    testWidgets('cada tipo tem a própria cor de fundo (checklist 4.6)', (tester) async {
+      await montar(
+        tester,
+        Column(children: [for (final tipo in TipoDeRetorno.values) Aviso(tipo: tipo, texto: '$tipo')]),
+      );
+
+      final fundos = tester
+          .widgetList<Container>(find.descendant(of: find.byType(Aviso), matching: find.byType(Container)))
+          .map((caixa) => (caixa.decoration! as BoxDecoration).color)
+          .toSet();
+      expect(fundos, hasLength(TipoDeRetorno.values.length));
+    });
+
     testWidgets('o aviso na tela usa o mesmo padrão do retorno passageiro', (tester) async {
       await montar(tester, const Aviso(tipo: TipoDeRetorno.erro, texto: 'Não foi possível atualizar.'));
 
       expect(find.text('Não foi possível atualizar.'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+  });
+
+  group('marca', () {
+    testWidgets('é um texto só: o leitor de tela lê o nome inteiro', (tester) async {
+      await montar(tester, const Marca(tamanho: 40));
+
+      expect(find.bySemanticsLabel('Marcaí'), findsOneWidget);
+    });
+
+    testWidgets('com texto a 200% e pouca largura, encolhe para caber inteira, sem corte', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: temaDoApp(),
+        home: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Scaffold(
+            body: Align(alignment: Alignment.topLeft, child: SizedBox(width: 200, child: Marca(tamanho: 60))),
+          ),
+        ),
+      ));
+
+      final texto = find.descendant(of: find.byType(Marca), matching: find.byType(RichText));
+      final paragrafo = tester.renderObject<RenderParagraph>(texto);
+      // Inteira: o texto foi disposto na largura que pede, e não espremido.
+      expect(paragrafo.size.width, greaterThanOrEqualTo(paragrafo.getMaxIntrinsicWidth(double.infinity) - 0.5));
+      // E cabe: na tela, não passa da largura que tem.
+      expect(tester.getRect(texto).width, lessThanOrEqualTo(200.5));
     });
   });
 

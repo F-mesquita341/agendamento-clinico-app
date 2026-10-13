@@ -27,7 +27,7 @@ class CampoDeEmail extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controlador,
-      decoration: const InputDecoration(labelText: 'E-mail', border: OutlineInputBorder()),
+      decoration: const InputDecoration(labelText: 'E-mail'),
       keyboardType: TextInputType.emailAddress,
       autofillHints: const [AutofillHints.email],
       autocorrect: false,
@@ -82,7 +82,6 @@ class _CampoDeSenhaState extends State<CampoDeSenha> {
       controller: widget.controlador,
       decoration: InputDecoration(
         labelText: 'Senha',
-        border: const OutlineInputBorder(),
         helperText: widget.regra,
         helperMaxLines: 2,
         suffixIcon: IconButton(

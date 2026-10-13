@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_do_consentimento.dart';
@@ -7,6 +8,8 @@ import '../cadastro/formulario_do_paciente_screen.dart';
 import '../cadastro/formulario_do_paciente_view_model.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
+import '../comum/marca.dart';
+import '../conta/abertura_screen.dart';
 import '../conta/entrar_screen.dart';
 import '../shell/shell_screen.dart';
 import '../termo/termo_screen.dart';
@@ -19,7 +22,8 @@ enum _Area { transicao, entrada, cadastro, aplicativo }
 /// A raiz do aplicativo: a guarda de rota da Etapa 12. Decide a tela pelo
 /// estado da sessão, sem roteador:
 ///
-///   sem sessão ............ entrar (e dali, criar conta, recuperar a senha)
+///   sem sessão ............ a abertura (e dali, criar conta ou entrar); ou
+///                           entrar direto, quando a sessão se perdeu
 ///   com sessão, sem perfil  termo, e então completar o cadastro
 ///   com sessão e perfil ... o aplicativo
 ///
@@ -93,20 +97,23 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
   Widget build(BuildContext context) {
     final sessao = context.watch<SessaoViewModel>();
     return switch (sessao.estado) {
-      EstadoDaSessao.iniciando => const _Abertura(),
-      EstadoDaSessao.carregandoPerfil => Scaffold(body: SafeArea(child: IndicadorDeCarga(demorando: sessao.demorando))),
-      EstadoDaSessao.falhou => Scaffold(
-          body: SafeArea(
-            child: FalhaDeCarga(
-              mensagem: sessao.erro!.mensagem,
-              tentarDeNovo: sessao.carregarPerfil,
-              outraSaida: (rotulo: 'Sair da conta', aoTocar: sessao.sair),
-            ),
+      EstadoDaSessao.iniciando => const _Iniciando(),
+      EstadoDaSessao.carregandoPerfil => _Transicao(child: IndicadorDeCarga(demorando: sessao.demorando)),
+      EstadoDaSessao.falhou => _Transicao(
+          child: FalhaDeCarga(
+            mensagem: sessao.erro!.mensagem,
+            tentarDeNovo: sessao.carregarPerfil,
+            outraSaida: (rotulo: 'Sair da conta', aoTocar: sessao.sair),
           ),
         ),
-      // A chave pelo motivo recria a tela quando ele muda, sem guardar o que
-      // estava digitado de uma sessão para outra.
-      EstadoDaSessao.semSessao => EntrarScreen(key: ValueKey(sessao.motivoDaSaida), aviso: sessao.motivoDaSaida),
+      EstadoDaSessao.semSessao => switch (sessao.motivoDaSaida) {
+          // Quem estava dentro e perdeu a sessão vai direto a entrar, com o
+          // motivo. A chave recria a tela quando o motivo muda, sem guardar o
+          // que estava digitado de uma sessão para outra.
+          final motivo? => EntrarScreen(key: ValueKey(motivo), aviso: motivo),
+          // Primeiro uso, ou saiu por vontade própria.
+          null => const AberturaScreen(),
+        },
       EstadoDaSessao.semPerfil => ChangeNotifierProvider(
           create: (contexto) => TermoViewModel(
             contexto.read<RepositorioDoConsentimento>(),
@@ -124,24 +131,49 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
   }
 }
 
-class _Abertura extends StatelessWidget {
-  const _Abertura();
+/// Carregando o perfil, ou a falha ao carregar: telas sem barra superior, sobre
+/// o fundo claro.
+///
+/// Pede ícones escuros na barra de status do Android. A espera inicial e a
+/// abertura, de fundo escuro, pedem ícones claros; uma tela sem barra superior
+/// que não pedisse nada herdaria os claros, e o relógio sumiria no fundo.
+class _Transicao extends StatelessWidget {
+  const _Transicao({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Espaco.grande),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.event_available_outlined, size: 64, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(height: Espaco.medio),
-              Text('Agendamento Clínico', style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
-              const SizedBox(height: Espaco.grande),
-              const CircularProgressIndicator(),
-            ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(body: SafeArea(child: child)),
+    );
+  }
+}
+
+/// Enquanto o provedor não diz se há sessão: a marca, e que algo está vindo.
+class _Iniciando extends StatelessWidget {
+  const _Iniciando();
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = Theme.of(context).colorScheme;
+    // Fundo escuro: os ícones da barra de status do Android ficam claros.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: cores.primary,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(Espaco.grande),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Marca(tamanho: 56),
+                const SizedBox(height: Espaco.maior),
+                CircularProgressIndicator(color: cores.onPrimary),
+              ],
+            ),
           ),
         ),
       ),

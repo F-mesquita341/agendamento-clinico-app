@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/tema.dart';
 import 'espaco.dart';
 
 /// Os três tipos de retorno ao paciente. Cada um tem sempre a mesma cor, o
@@ -31,8 +32,8 @@ class Aviso extends StatelessWidget {
   Widget build(BuildContext context) {
     final estilo = _EstiloDoRetorno.de(context, tipo);
     return Container(
-      color: estilo.fundo,
-      padding: const EdgeInsets.symmetric(horizontal: Espaco.margem, vertical: Espaco.medio),
+      decoration: BoxDecoration(color: estilo.fundo, borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(Espaco.medio),
       // liveRegion: o leitor de tela anuncia o aviso quando ele aparece.
       child: Semantics(liveRegion: true, child: _Linha(estilo: estilo, texto: texto)),
     );
@@ -63,11 +64,13 @@ class _EstiloDoRetorno {
 
   /// Pares de fundo e texto que o teste do tema confere a 4,5:1.
   factory _EstiloDoRetorno.de(BuildContext context, TipoDeRetorno tipo) {
-    final cores = Theme.of(context).colorScheme;
+    final tema = Theme.of(context);
+    final cores = tema.colorScheme;
+    final retorno = tema.extension<CoresDeRetorno>()!;
     return switch (tipo) {
       TipoDeRetorno.sucesso =>
-        _EstiloDoRetorno(Icons.check_circle_outline, cores.secondaryContainer, cores.onSecondaryContainer),
-      TipoDeRetorno.aviso => _EstiloDoRetorno(Icons.info_outline, cores.primaryContainer, cores.onPrimaryContainer),
+        _EstiloDoRetorno(Icons.check_circle_outline, retorno.sucesso.fundo, retorno.sucesso.texto),
+      TipoDeRetorno.aviso => _EstiloDoRetorno(Icons.info_outline, retorno.aviso.fundo, retorno.aviso.texto),
       TipoDeRetorno.erro => _EstiloDoRetorno(Icons.error_outline, cores.errorContainer, cores.onErrorContainer),
     };
   }

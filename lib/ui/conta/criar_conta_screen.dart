@@ -109,7 +109,13 @@ class _CriarContaScreenState extends State<CriarContaScreen> {
                       ],
                       BotaoPrincipal(rotulo: 'Criar conta', aoTocar: _criar, enviando: _envio.enviando),
                       const SizedBox(height: Espaco.pequeno),
-                      BotaoDeTexto(rotulo: 'Já tenho conta', aoTocar: () => Navigator.of(context).maybePop()),
+                      // Devolve o e-mail a quem abriu esta tela, que leva a entrar
+                      // com ele. Por maybePop: com o formulário preenchido, a
+                      // pergunta de descartar vem antes.
+                      BotaoDeTexto(
+                        rotulo: 'Já tenho conta',
+                        aoTocar: () => Navigator.of(context).maybePop(_email.text.trim()),
+                      ),
                     ],
                   ),
                 ),

@@ -276,6 +276,41 @@ void main() {
       expect(textoDo(tester, 'E-mail').controller!.text, 'ana@exemplo.test');
     });
 
+    testWidgets('num celular estreito, o erro comprido aparece inteiro, em mais de uma linha (checklist 9.4)',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await montar(
+        tester,
+        AutenticacaoFalsa(criarConta: [const ErroDeAutenticacao('email-already-in-use')]),
+        const CriarContaScreen(),
+      );
+      await preencher(tester, email: 'ana@exemplo.test', senha: '123456');
+      await tocar(tester, 'Criar conta');
+
+      final erro = find.text('Este e-mail já tem cadastro. Quer entrar ou recuperar a senha?');
+      final umaLinha = tester.widget<Text>(erro).style!.fontSize! * 1.5;
+      expect(tester.getSize(erro).height, greaterThan(umaLinha));
+    });
+
+    testWidgets('"Já tenho conta" sem e-mail nenhum não apaga o que estava digitado em entrar', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), const EntrarScreen());
+      await preencher(tester, email: 'ana@exemplo.test');
+      await tocar(tester, 'Criar conta');
+      await tester.pumpAndSettle();
+      // O e-mail veio de entrar; a pessoa o apaga, e desiste de criar a conta.
+      await preencher(tester, email: '');
+
+      await tocar(tester, 'Já tenho conta');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Descartar'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CriarContaScreen), findsNothing);
+      expect(textoDo(tester, 'E-mail').controller!.text, 'ana@exemplo.test');
+    });
+
     testWidgets('voltar com o formulário preenchido pergunta antes de descartar', (tester) async {
       await abrirAPartirDeEntrar(tester, AutenticacaoFalsa());
       await preencher(tester, senha: '123');

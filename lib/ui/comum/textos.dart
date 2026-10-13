@@ -9,6 +9,10 @@
 /// - reserva — o horário guardado enquanto o pagamento não se confirma;
 /// - pagamento antecipado — nunca "caução" nem "sinal".
 abstract final class Textos {
+  /// O nome do aplicativo, como o Android o mostra (android:label, no
+  /// AndroidManifest.xml, tem de dizer o mesmo).
+  static const nomeDoApp = 'Marcaí';
+
   static const carregando = 'Carregando…';
 
   /// Não afirma a causa: com o servidor fora do ar, a conexão também fica

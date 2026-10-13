@@ -16,10 +16,13 @@ import 'validacoes.dart';
 /// se recupera a senha. Quando a entrada dá certo, a sessão muda e a raiz do
 /// aplicativo troca a tela — esta tela não navega para lugar nenhum.
 class EntrarScreen extends StatefulWidget {
-  const EntrarScreen({super.key, this.aviso});
+  const EntrarScreen({super.key, this.aviso, this.emailInicial = ''});
 
   /// Por que a pessoa está aqui sem ter pedido — a sessão terminou.
   final String? aviso;
+
+  /// O e-mail de quem chegou aqui vindo de criar a conta.
+  final String emailInicial;
 
   @override
   State<EntrarScreen> createState() => _EntrarScreenState();
@@ -27,7 +30,7 @@ class EntrarScreen extends StatefulWidget {
 
 class _EntrarScreenState extends State<EntrarScreen> {
   final _formulario = GlobalKey<FormState>();
-  final _email = TextEditingController();
+  late final _email = TextEditingController(text: widget.emailInicial);
   final _senha = TextEditingController();
   final _envio = EnvioDeConta();
 
@@ -46,12 +49,13 @@ class _EntrarScreenState extends State<EntrarScreen> {
   }
 
   Future<void> _criarConta() async {
-    // Quem descobre, ao criar a conta, que o e-mail já tem cadastro volta para
-    // cá com ele preenchido.
+    // Quem, ao criar a conta, descobre que o e-mail já tem cadastro — ou
+    // lembra que já tem conta — volta para cá com ele preenchido. Voltar sem
+    // e-mail nenhum não apaga o que já estava digitado aqui.
     final email = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => CriarContaScreen(emailInicial: _email.text.trim())),
     );
-    if (email != null && mounted) _email.text = email;
+    if (email != null && email.isNotEmpty && mounted) _email.text = email;
   }
 
   void _esqueciASenha() {
@@ -98,7 +102,7 @@ class _EntrarScreenState extends State<EntrarScreen> {
                     aoConcluir: (_) => _entrar(),
                   ),
                   Align(
-                    alignment: Alignment.centerRight,
+                    alignment: Alignment.centerLeft,
                     child: BotaoDeTexto(rotulo: 'Esqueci minha senha', aoTocar: _esqueciASenha),
                   ),
                   const SizedBox(height: Espaco.pequeno),
@@ -107,10 +111,16 @@ class _EntrarScreenState extends State<EntrarScreen> {
                     const SizedBox(height: Espaco.medio),
                   ],
                   BotaoPrincipal(rotulo: 'Entrar', aoTocar: _entrar, enviando: _envio.enviando),
-                  const SizedBox(height: Espaco.maior),
-                  const Text('Ainda não tem conta?', textAlign: TextAlign.center),
-                  const SizedBox(height: Espaco.pequeno),
-                  BotaoSecundario(rotulo: 'Criar conta', aoTocar: _criarConta),
+                  const SizedBox(height: Espaco.grande),
+                  // Lado a lado quando cabe; um embaixo do outro com o texto ampliado.
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text('Ainda não tem conta?'),
+                      BotaoDeTexto(rotulo: 'Criar conta', aoTocar: _criarConta),
+                    ],
+                  ),
                 ],
               ),
             ),
