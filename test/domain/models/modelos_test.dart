@@ -5,11 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('instante da API', () {
-    test('o mesmo instante, convertido para o horário do aparelho', () {
+    test('o instante fica em UTC, como a API mandou, sem passar pelo fuso do aparelho', () {
       final lido = instanteDaApi('2026-10-06T11:30:00.000Z');
 
-      expect(lido.isUtc, isFalse);
-      expect(lido.toUtc(), DateTime.utc(2026, 10, 6, 11, 30));
+      expect(lido.isUtc, isTrue);
+      expect(lido, DateTime.utc(2026, 10, 6, 11, 30));
+    });
+
+    test('a hora que se mostra é a da clínica, três horas atrás do UTC', () {
+      expect(horaNaClinica(DateTime.utc(2026, 10, 15, 17, 30)), '14:30');
+      expect(horaNaClinica(DateTime.utc(2026, 10, 15, 11, 5)), '08:05');
+      // Perto da meia-noite, a hora volta para o dia anterior.
+      expect(horaNaClinica(DateTime.utc(2026, 10, 15, 2, 5)), '23:05');
+    });
+
+    test('o relógio da clínica não depende do fuso do aparelho', () {
+      final instante = DateTime.utc(2026, 10, 15, 17, 30);
+
+      // O mesmo instante, escrito no fuso do aparelho, dá o mesmo relógio.
+      expect(relogioDaClinica(instante.toLocal()), relogioDaClinica(instante));
+      expect(relogioDaClinica(instante).isUtc, isTrue);
     });
 
     test('texto sem o Z do UTC é recusado, em vez de lido como hora local', () {

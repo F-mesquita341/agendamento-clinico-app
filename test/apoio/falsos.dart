@@ -1,12 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_consentimento.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
+import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
+import 'package:agendamento_clinico/domain/models/especialidade.dart';
+import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/paciente.dart';
+import 'package:agendamento_clinico/domain/models/pagina.dart';
+import 'package:agendamento_clinico/domain/models/profissional.dart';
 
 /// Respostas de teste numa fila: cada chamada consome a próxima. Pode ser um
 /// valor, um erro (Exception ou Error, lançado), ou um Completer que o teste
@@ -135,6 +141,65 @@ class ConsentimentoFalso implements RepositorioDoConsentimento {
   @override
   Future<String> versaoVigente() => respostas.proxima<String>();
 }
+
+/// O catálogo em memória, com uma fila de respostas para cada pedido e o
+/// registro do que foi pedido.
+class CatalogoFalso implements RepositorioDoCatalogo {
+  CatalogoFalso({
+    Iterable<Object?> especialidades = const [],
+    Iterable<Object?> profissionais = const [],
+    Iterable<Object?> horarios = const [],
+  })  : respostasDeEspecialidades = Fila(especialidades),
+        respostasDeProfissionais = Fila(profissionais),
+        respostasDeHorarios = Fila(horarios);
+
+  final Fila respostasDeEspecialidades;
+  final Fila respostasDeProfissionais;
+  final Fila respostasDeHorarios;
+  final pedidosDeProfissionais = <({int? especialidadeId, String? termo, int pagina})>[];
+  final pedidosDeHorarios = <({int profissionalId, DataCivil ate})>[];
+
+  @override
+  Future<List<Especialidade>> especialidades() => respostasDeEspecialidades.proxima<List<Especialidade>>();
+
+  @override
+  Future<Pagina<Profissional>> profissionais({int? especialidadeId, String? termo, int pagina = 1}) {
+    pedidosDeProfissionais.add((especialidadeId: especialidadeId, termo: termo, pagina: pagina));
+    return respostasDeProfissionais.proxima<Pagina<Profissional>>();
+  }
+
+  @override
+  Future<List<Horario>> horarios(int profissionalId, {required DataCivil ate}) {
+    pedidosDeHorarios.add((profissionalId: profissionalId, ate: ate));
+    return respostasDeHorarios.proxima<List<Horario>>();
+  }
+}
+
+/// O discador e o mapa em memória: registra o que seria aberto, e responde
+/// se o aparelho "conseguiu" abrir.
+class AbridorDeLinksFalso implements AbridorDeLinks {
+  AbridorDeLinksFalso({this.consegue = true});
+
+  final bool consegue;
+  final ligacoes = <String>[];
+  final mapas = <String>[];
+
+  @override
+  Future<bool> ligar(String telefone) async {
+    ligacoes.add(telefone);
+    return consegue;
+  }
+
+  @override
+  Future<bool> abrirNoMapa(String lugar) async {
+    mapas.add(lugar);
+    return consegue;
+  }
+}
+
+/// Uma página de profissionais; sem mais nada dito, a única.
+Pagina<Profissional> paginaDe(List<Profissional> itens, {int pagina = 1, int paginas = 1, int? total}) =>
+    Pagina(itens: itens, pagina: pagina, paginas: paginas, total: total ?? itens.length);
 
 /// Lê os arquivos do termo direto do disco, como o aplicativo os lê do pacote.
 Future<String> lerDoDisco(String caminho) => Future.value(File(caminho).readAsStringSync());

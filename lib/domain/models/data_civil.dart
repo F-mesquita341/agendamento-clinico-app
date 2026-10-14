@@ -1,8 +1,12 @@
-/// Data de calendário, sem hora e sem fuso: a data de nascimento.
+import 'instante.dart';
+
+/// Data de calendário, sem hora e sem fuso: a data de nascimento, um dia da
+/// grade de horários.
 ///
-/// Não passa por `instanteDaApi`. Um dia não é um instante: convertido para
-/// um, em UTC, e depois para o horário do aparelho, o 15 de março viraria 14
-/// de março às 21h no Brasil, e a tela mostraria o dia errado.
+/// A data de nascimento não passa por `instanteDaApi`. Um dia não é um
+/// instante: convertido para um, em UTC, o 15 de março viraria 14 de março às
+/// 21h no Brasil, e a tela mostraria o dia errado. Já o dia de um instante —
+/// o de uma consulta — é sempre o da clínica: [DataCivil.naClinica].
 class DataCivil implements Comparable<DataCivil> {
   const DataCivil._(this.ano, this.mes, this.dia);
 
@@ -28,9 +32,22 @@ class DataCivil implements Comparable<DataCivil> {
     return data;
   }
 
-  /// O dia em que cai um instante, no fuso do próprio [instante] — passe-o já
-  /// convertido para o horário do aparelho, como `instanteDaApi` devolve.
-  factory DataCivil.doInstante(DateTime instante) => DataCivil._(instante.year, instante.month, instante.day);
+  /// O dia do calendário da clínica em que cai um [instante]. Às 22:30 de
+  /// Quixadá já é o dia seguinte em UTC: o dia que vale é o de lá.
+  factory DataCivil.naClinica(DateTime instante) {
+    final relogio = relogioDaClinica(instante);
+    return DataCivil._(relogio.year, relogio.month, relogio.day);
+  }
+
+  /// Esta data mais [dias] dias — ou menos, com número negativo.
+  DataCivil maisDias(int dias) {
+    // DateTime.utc normaliza: dia 33 de outubro vira 2 de novembro.
+    final soma = DateTime.utc(ano, mes, dia + dias);
+    return DataCivil._(soma.year, soma.month, soma.day);
+  }
+
+  /// De 1, segunda-feira, a 7, domingo.
+  int get diaDaSemana => DateTime.utc(ano, mes, dia).weekday;
 
   final int ano;
   final int mes;

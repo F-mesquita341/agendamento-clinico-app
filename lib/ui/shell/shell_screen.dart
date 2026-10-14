@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_do_catalogo.dart';
-import '../especialidades/especialidades_screen.dart';
-import '../especialidades/especialidades_view_model.dart';
+import '../../domain/models/profissional.dart';
+import '../busca/busca_screen.dart';
+import '../busca/busca_view_model.dart';
 import '../perfil/perfil_screen.dart';
+import '../profissional/horarios_view_model.dart';
+import '../profissional/profissional_screen.dart';
 
 /// O aplicativo de quem tem conta e cadastro: a barra de navegação de baixo,
 /// sempre com os mesmos itens, na mesma ordem (checklist, item 4.4). Início e
@@ -20,6 +23,18 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   int _aba = 0;
+
+  /// Abre o profissional por cima da barra de baixo. O view model da tela
+  /// nasce aqui, com quem a abre: na Etapa 14, o resumo da consulta volta para
+  /// ela com o dia e o horário ainda escolhidos (checklist, item 3.1).
+  void _abrir(BuildContext context, Profissional profissional) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => ChangeNotifierProvider(
+        create: (contexto) => HorariosViewModel(contexto.read<RepositorioDoCatalogo>(), profissional)..carregar(),
+        child: const ProfissionalScreen(),
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,8 +52,8 @@ class _ShellScreenState extends State<ShellScreen> {
           index: _aba,
           children: [
             ChangeNotifierProvider(
-              create: (contexto) => EspecialidadesViewModel(contexto.read<RepositorioDoCatalogo>())..carregar(),
-              child: const EspecialidadesScreen(),
+              create: (contexto) => BuscaViewModel(contexto.read<RepositorioDoCatalogo>())..carregar(),
+              child: BuscaScreen(aoAbrir: (profissional) => _abrir(context, profissional)),
             ),
             PerfilScreen(lerArquivo: widget.lerArquivo),
           ],

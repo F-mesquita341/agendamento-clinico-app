@@ -1,4 +1,5 @@
 import '../../domain/models/erro_da_api.dart';
+import '../../domain/models/pagina.dart';
 
 /// Lê uma lista embrulhada no nome do recurso — `{especialidades: [...]}`,
 /// `{profissionais: [...]}` —, que é a forma de toda listagem da API.
@@ -21,6 +22,28 @@ List<T> lerLista<T>(
   } on FormatException {
     throw const ErroDaApi.respostaInesperada(200);
   }
+}
+
+/// Lê uma listagem paginada — `{profissionais: [...], paginacao: {pagina,
+/// paginas, total}}`. Mesma regra de [lerLista]: formato errado, na lista ou
+/// na paginação, vira `RESPOSTA_INESPERADA`.
+Pagina<T> lerPagina<T>(
+  Object? corpo,
+  String chave,
+  T Function(Map<String, Object?> json) converter,
+) {
+  final itens = lerLista(corpo, chave, converter);
+  // lerLista já garantiu que o corpo é um objeto.
+  final paginacao = (corpo as Map<String, Object?>)['paginacao'];
+  if (paginacao is Map<String, Object?>) {
+    final pagina = paginacao['pagina'];
+    final paginas = paginacao['paginas'];
+    final total = paginacao['total'];
+    if (pagina is int && paginas is int && total is int) {
+      return Pagina(itens: itens, pagina: pagina, paginas: paginas, total: total);
+    }
+  }
+  throw const ErroDaApi.respostaInesperada(200);
 }
 
 /// Lê um recurso embrulhado no próprio nome — `{paciente: {...}}` —, que é a

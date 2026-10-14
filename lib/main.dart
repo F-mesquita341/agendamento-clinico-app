@@ -10,6 +10,8 @@ import 'config/tema.dart';
 import 'data/repositories/repositorio_do_catalogo.dart';
 import 'data/repositories/repositorio_do_consentimento.dart';
 import 'data/repositories/repositorio_do_paciente.dart';
+import 'data/services/abridor_de_links.dart';
+import 'data/services/abridor_de_links_do_aparelho.dart';
 import 'data/services/api_client.dart';
 import 'data/services/autenticacao_firebase.dart';
 import 'data/services/servico_de_autenticacao.dart';
@@ -26,6 +28,7 @@ Future<void> main() async {
     autenticacao: AutenticacaoFirebase(),
     cliente: http.Client(),
     base: Uri.parse(urlDaApi),
+    abridor: AbridorDeLinksDoAparelho(),
   ));
 }
 
@@ -38,12 +41,16 @@ class AplicativoDoPaciente extends StatefulWidget {
     required this.autenticacao,
     required this.cliente,
     required this.base,
+    required this.abridor,
     this.lerArquivo,
   });
 
   final ServicoDeAutenticacao autenticacao;
   final http.Client cliente;
   final Uri base;
+
+  /// O discador e o mapa, fora do aplicativo.
+  final AbridorDeLinks abridor;
 
   /// Os arquivos do pacote do aplicativo — o texto do termo.
   final Future<String> Function(String caminho)? lerArquivo;
@@ -82,6 +89,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
     return MultiProvider(
       providers: [
         Provider<ServicoDeAutenticacao>.value(value: widget.autenticacao),
+        Provider<AbridorDeLinks>.value(value: widget.abridor),
         Provider<RepositorioDoCatalogo>(create: (_) => RepositorioDoCatalogoRemoto(_api)),
         Provider<RepositorioDoPaciente>(create: (_) => RepositorioDoPacienteRemoto(_api)),
         Provider<RepositorioDoConsentimento>(create: (_) => RepositorioDoConsentimentoRemoto(_api)),
