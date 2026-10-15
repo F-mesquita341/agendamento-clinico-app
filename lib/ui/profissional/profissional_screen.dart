@@ -69,6 +69,12 @@ class ProfissionalScreen extends StatelessWidget {
     final tarde = [for (final horario in doDia) if (!horario.deManha) horario];
 
     return [
+      // Com a grade na tela, uma espera longa — atualizar, ver mais dias — também
+      // avisa.
+      if (vm.demorando) ...[
+        const ComMargem(child: Aviso(tipo: TipoDeRetorno.aviso, texto: Textos.servidorDemorando)),
+        const SizedBox(height: Espaco.medio),
+      ],
       if (vm.erroAoAtualizar case final erro?) ...[
         ComMargem(
           child: Aviso(tipo: TipoDeRetorno.erro, texto: 'Não foi possível atualizar. ${erro.mensagem}'),
@@ -76,7 +82,16 @@ class ProfissionalScreen extends StatelessWidget {
         const SizedBox(height: Espaco.medio),
       ],
       ComMargem(
-        child: Semantics(header: true, child: Text('Escolha o dia', style: tema.textTheme.titleMedium)),
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: Espaco.pequeno,
+          children: [
+            Semantics(header: true, child: Text('Escolha o dia', style: tema.textTheme.titleMedium)),
+            // O mês do dia escolhido: a faixa vai até 60 dias, e cruza meses.
+            Text(comInicialMaiuscula(mesDoAno(dia ?? vm.hoje, hoje: vm.hoje)), style: apoio),
+          ],
+        ),
       ),
       const SizedBox(height: Espaco.pequeno),
       _FaixaDeDias(vm: vm),

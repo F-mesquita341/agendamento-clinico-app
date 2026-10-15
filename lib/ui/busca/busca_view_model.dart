@@ -135,7 +135,7 @@ class BuscaViewModel extends ChangeNotifier {
     _erroAoMostrarMais = null;
     _notificar();
 
-    final (:pagina, :erro) = await _pedir(1);
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1));
     if (busca != _busca) return;
     if (pagina != null) {
       _mostrar(pagina);
@@ -146,13 +146,18 @@ class BuscaViewModel extends ChangeNotifier {
   }
 
   /// A página seguinte, acrescentada à lista.
+  ///
+  /// A tela esconde o botão enquanto a página carrega, mas a trava fica aqui:
+  /// um segundo pedido da mesma página duplicaria os profissionais na lista, e
+  /// um pedido durante uma busca nova levaria a página de uma lista que já saiu.
   Future<void> mostrarMais() async {
+    if (_mostrandoMais || !_temMais || _estado != EstadoDaCarga.pronto) return;
     final busca = _busca;
     _mostrandoMais = true;
     _erroAoMostrarMais = null;
     _notificar();
 
-    final (:pagina, :erro) = await _pedir(_pagina + 1);
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(_pagina + 1));
     if (busca != _busca) return;
     _mostrandoMais = false;
     if (pagina != null) {
@@ -172,12 +177,13 @@ class BuscaViewModel extends ChangeNotifier {
     _erroAoAtualizar = null;
     _erroAoMostrarMais = null;
     _mostrandoMais = false;
-    _aviso.iniciar();
+    // As respostas das buscas anteriores vão ser descartadas: não contam mais
+    // para o aviso de demora.
+    _aviso.esquecerPedidos();
     _notificar();
 
-    final (:pagina, :erro) = await _pedir(1);
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1));
     if (busca != _busca) return;
-    _aviso.parar();
     if (pagina != null) {
       _mostrar(pagina);
       _estado = EstadoDaCarga.pronto;

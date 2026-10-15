@@ -4,6 +4,7 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.da
 import 'package:agendamento_clinico/data/services/api_client.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -207,6 +208,59 @@ void main() {
 
     test('corpo que nem objeto é também', () async {
       await expectLater(catalogo(<Object>[]).profissionais(), respostaInesperada);
+    });
+  });
+
+  group('resposta fora do formato, no log do aparelho', () {
+    late List<String> registro;
+    setUp(() {
+      registro = [];
+      final original = debugPrint;
+      debugPrint = (mensagem, {wrapWidth}) => registro.add(mensagem ?? '');
+      addTearDown(() => debugPrint = original);
+    });
+
+    test('diz o recurso e o motivo — o do modelo, quando é um item que não serve', () async {
+      await expectLater(
+        catalogo({
+          'profissionais': [
+            {'id': 2},
+          ],
+          'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
+        }).profissionais(),
+        respostaInesperada,
+      );
+
+      expect(registro, ['Resposta fora do formato em "profissionais": Profissional fora do formato esperado.']);
+    });
+
+    test('lista que não é lista, e paginação que não veio', () async {
+      await expectLater(catalogo({'especialidades': 'nenhuma'}).especialidades(), respostaInesperada);
+      await expectLater(catalogo({'profissionais': <Object>[]}).profissionais(), respostaInesperada);
+
+      expect(registro, [
+        'Resposta fora do formato em "especialidades": não veio uma lista.',
+        'Resposta fora do formato em "profissionais": a paginação não veio, ou veio fora do formato.',
+      ]);
+    });
+
+    test('horário com o instante sem fuso', () async {
+      await expectLater(
+        catalogo({
+          'horarios': [
+            {'id': 1, 'inicio': '2026-10-15T14:30:00.000', 'duracaoMinutos': 30, 'versao': 0},
+          ],
+        }).horarios(2, ate: DataCivil.tentar(2026, 10, 28)!),
+        respostaInesperada,
+      );
+
+      expect(registro, ['Resposta fora do formato em "horarios": Instante sem fuso: a API sempre manda UTC.']);
+    });
+
+    test('resposta no formato não deixa nada no log', () async {
+      await catalogo({'especialidades': <Object>[]}).especialidades();
+
+      expect(registro, isEmpty);
     });
   });
 

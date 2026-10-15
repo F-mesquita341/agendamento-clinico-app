@@ -9,6 +9,7 @@ import '../comum/chip_de_escolha.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
 import '../comum/retorno.dart';
+import '../comum/textos.dart';
 import 'busca_view_model.dart';
 
 /// Buscar: as especialidades para escolher (checklist, item 6.3), o nome do
@@ -63,7 +64,7 @@ class _BuscaScreenState extends State<BuscaScreen> {
                     // Nome de gente não é erro de digitação.
                     autocorrect: false,
                     decoration: InputDecoration(
-                      hintText: 'Profissional ou especialidade',
+                      hintText: 'Nome do profissional ou especialidade',
                       // Com o texto ampliado, a dica quebra em linhas em vez de ser cortada.
                       hintMaxLines: 3,
                       prefixIcon: const Icon(Icons.search),
@@ -123,6 +124,12 @@ class _BuscaScreenState extends State<BuscaScreen> {
                     ),
                   ),
                 ),
+              // Com a lista na tela, uma espera longa — atualizar — também avisa.
+              // A do "mostrar mais" avisa no fim da lista, onde a pessoa está.
+              if (vm.demorando && vm.estado == EstadoDaCarga.pronto && !vm.mostrandoMais) ...[
+                const ComMargem(child: Aviso(tipo: TipoDeRetorno.aviso, texto: Textos.servidorDemorando)),
+                const SizedBox(height: Espaco.medio),
+              ],
               if (vm.erroAoAtualizar case final erro?) ...[
                 ComMargem(
                   child: Aviso(tipo: TipoDeRetorno.erro, texto: 'Não foi possível atualizar. ${erro.mensagem}'),
@@ -159,7 +166,7 @@ class _BuscaScreenState extends State<BuscaScreen> {
                       const SizedBox(height: Espaco.medio),
                     ],
                     if (vm.mostrandoMais)
-                      const IndicadorDeCarga(demorando: false)
+                      IndicadorDeCarga(demorando: vm.demorando)
                     else if (vm.temMais)
                       ComMargem(
                         child: BotaoSecundario(rotulo: 'Mostrar mais profissionais', aoTocar: vm.mostrarMais),

@@ -4,6 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// As datas como o paciente as lê (checklist, item 2.4).
 void main() {
+  group('mês do ano', () {
+    final hoje = DataCivil.tentar(2026, 10, 15)!;
+
+    test('o nome do mês, sem o ano quando é o corrente', () {
+      expect(mesDoAno(DataCivil.tentar(2026, 10, 1)!, hoje: hoje), 'outubro');
+      expect(mesDoAno(DataCivil.tentar(2026, 3, 9)!, hoje: hoje), 'março');
+      expect(mesDoAno(DataCivil.tentar(2026, 12, 31)!, hoje: hoje), 'dezembro');
+    });
+
+    test('com o ano quando não é o corrente', () {
+      expect(mesDoAno(DataCivil.tentar(2027, 1, 4)!, hoje: hoje), 'janeiro de 2027');
+    });
+  });
+
   final hoje = DataCivil.tentar(2026, 10, 13)!;
   final quinta = DataCivil.tentar(2026, 10, 15)!;
 
