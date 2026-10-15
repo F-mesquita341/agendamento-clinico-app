@@ -15,6 +15,14 @@ void main() {
   final retorno = tema.extension<CoresDeRetorno>()!;
   final branco = esquema.surfaceContainerLowest;
 
+  // O chip como o tema o pinta em cada estado, e não só as cores do esquema.
+  final chip = tema.chipTheme;
+  const escolhido = {WidgetState.selected};
+  Color fundoDoChip(Set<WidgetState> estados) => chip.color!.resolve(estados)!;
+  Color textoDoChip(Set<WidgetState> estados) =>
+      WidgetStateProperty.resolveAs<Color?>(chip.labelStyle!.color, estados)!;
+  final bordaDoChip = WidgetStateProperty.resolveAs<BorderSide?>(chip.side, {})!.color;
+
   test('a fórmula de contraste dá os extremos conhecidos', () {
     expect(razaoDeContraste(Colors.black, Colors.white), closeTo(21, 0.01));
     expect(razaoDeContraste(Colors.white, Colors.white), closeTo(1, 0.01));
@@ -38,6 +46,8 @@ void main() {
     'retorno de erro': (esquema.onErrorContainer, esquema.errorContainer),
     'retorno de sucesso': (retorno.sucesso.texto, retorno.sucesso.fundo),
     'retorno de aviso': (retorno.aviso.texto, retorno.aviso.fundo),
+    'chip': (textoDoChip({}), fundoDoChip({})),
+    'chip escolhido': (textoDoChip(escolhido), fundoDoChip(escolhido)),
   };
 
   for (final MapEntry(key: nome, value: (texto, fundo)) in textos.entries) {
@@ -54,6 +64,10 @@ void main() {
     'borda de campo sobre o fundo': (bordaDoCampo, esquema.surface),
     'borda de campo sobre o preenchimento do próprio campo': (bordaDoCampo, campo.fillColor!),
     'borda do botão secundário sobre o fundo': (bordaDoBotao, esquema.surface),
+    'borda do chip sobre o fundo': (bordaDoChip, esquema.surface),
+    'borda do chip sobre o próprio chip': (bordaDoChip, fundoDoChip({})),
+    'chip escolhido sobre o fundo': (fundoDoChip(escolhido), esquema.surface),
+    'ícone de marcado sobre o chip escolhido': (chip.iconTheme!.color!, fundoDoChip(escolhido)),
     // A marca é texto grande, e o "í" dela é a única coisa em âmbar que se lê.
     'âmbar da marca sobre a cor principal': (ambarDaMarca, esquema.primary),
   };

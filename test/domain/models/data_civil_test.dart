@@ -37,8 +37,23 @@ void main() {
     expect(DataCivil.tentar(2001, 2, 3)!.paraApi(), '2001-02-03');
   });
 
-  test('o dia de um instante é o do próprio instante, sem conversão de fuso', () {
-    expect(DataCivil.doInstante(DateTime(2026, 10, 6, 23, 59)), DataCivil.tentar(2026, 10, 6));
+  test('o dia de um instante é o do calendário da clínica', () {
+    // 22:30 do dia 14 em Quixadá: em UTC, já é dia 15.
+    expect(DataCivil.naClinica(DateTime.utc(2026, 10, 15, 1, 30)), DataCivil.tentar(2026, 10, 14));
+    // Meia-noite em Quixadá: o dia vira.
+    expect(DataCivil.naClinica(DateTime.utc(2026, 10, 15, 3)), DataCivil.tentar(2026, 10, 15));
+  });
+
+  test('somar dias atravessa o mês e o ano', () {
+    expect(DataCivil.tentar(2026, 10, 30)!.maisDias(3), DataCivil.tentar(2026, 11, 2));
+    expect(DataCivil.tentar(2026, 12, 31)!.maisDias(1), DataCivil.tentar(2027, 1, 1));
+    expect(DataCivil.tentar(2026, 3, 1)!.maisDias(-1), DataCivil.tentar(2026, 2, 28));
+  });
+
+  test('dia da semana, de 1 (segunda-feira) a 7 (domingo)', () {
+    expect(DataCivil.tentar(2026, 10, 15)!.diaDaSemana, 4);
+    expect(DataCivil.tentar(2026, 10, 18)!.diaDaSemana, 7);
+    expect(DataCivil.tentar(2026, 10, 19)!.diaDaSemana, 1);
   });
 
   test('compara pela ordem do calendário', () {

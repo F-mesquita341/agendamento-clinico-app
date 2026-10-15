@@ -170,8 +170,31 @@ ThemeData temaDoApp() {
     snackBarTheme: SnackBarThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
+    chipTheme: ChipThemeData(
+      shape: capsula,
+      // 48 dp à vista, como os botões, e não só na área que responde ao dedo:
+      // em cima e embaixo de uma linha de 20, 12,5 de respiro e 1,5 de borda.
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12.5),
+      color: WidgetStateProperty.resolveWith(
+        (estados) => _escolhido(estados) ? esquema.primary : esquema.surfaceContainerLowest,
+      ),
+      side: WidgetStateBorderSide.resolveWith(
+        (estados) => BorderSide(color: _escolhido(estados) ? esquema.primary : esquema.outline, width: 1.5),
+      ),
+      labelStyle: base.textTheme.labelLarge!.copyWith(
+        fontSize: 15,
+        height: 20 / 15,
+        color: WidgetStateColor.resolveWith(
+          (estados) => _escolhido(estados) ? esquema.onPrimary : esquema.onSurface,
+        ),
+      ),
+      // O ícone de marcado do chip escolhido (ChipDeEscolha).
+      iconTheme: IconThemeData(color: esquema.onPrimary, size: 18),
+    ),
   );
 }
+
+bool _escolhido(Set<WidgetState> estados) => estados.contains(WidgetState.selected);
 
 /// Razão de contraste do WCAG 2.1 entre duas cores, de 1 a 21.
 double razaoDeContraste(Color a, Color b) {

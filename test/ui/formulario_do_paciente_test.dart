@@ -142,13 +142,14 @@ void main() {
     });
 
     test('data de nascimento é opcional, mas, se vier, existe, é depois de 1900 e não é futura', () {
-      final hoje = DateTime(2026, 10, 7);
-      expect(validarDataDeNascimento('', hoje: hoje), isNull);
-      expect(validarDataDeNascimento('15/03', hoje: hoje), 'Informe a data completa, no formato dd/mm/aaaa.');
-      expect(validarDataDeNascimento('30/02/2000', hoje: hoje), 'Essa data de nascimento não existe no calendário.');
-      expect(validarDataDeNascimento('31/12/1899', hoje: hoje), 'Confira o ano da data de nascimento.');
-      expect(validarDataDeNascimento('08/10/2026', hoje: hoje), 'A data de nascimento não pode estar no futuro.');
-      expect(validarDataDeNascimento('07/10/2026', hoje: hoje), isNull);
+      // 22h do dia 7 em Quixadá: em UTC, já é dia 8.
+      final hoje = DateTime.utc(2026, 10, 8, 1);
+      expect(validarDataDeNascimento('', agora: hoje), isNull);
+      expect(validarDataDeNascimento('15/03', agora: hoje), 'Informe a data completa, no formato dd/mm/aaaa.');
+      expect(validarDataDeNascimento('30/02/2000', agora: hoje), 'Essa data de nascimento não existe no calendário.');
+      expect(validarDataDeNascimento('31/12/1899', agora: hoje), 'Confira o ano da data de nascimento.');
+      expect(validarDataDeNascimento('08/10/2026', agora: hoje), 'A data de nascimento não pode estar no futuro.');
+      expect(validarDataDeNascimento('07/10/2026', agora: hoje), isNull);
       expect(lerDataDeNascimento('15/03/1990'), DataCivil.tentar(1990, 3, 15));
     });
   });

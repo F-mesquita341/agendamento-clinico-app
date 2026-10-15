@@ -2,18 +2,23 @@ import 'dart:convert';
 
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
+import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
 import 'package:agendamento_clinico/main.dart';
 import 'package:agendamento_clinico/ui/sessao/portao_da_sessao.dart';
 import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:agendamento_clinico/ui/cadastro/formulario_do_paciente_screen.dart';
+import 'package:agendamento_clinico/ui/busca/busca_screen.dart';
+import 'package:agendamento_clinico/ui/comum/card_do_profissional.dart';
+import 'package:agendamento_clinico/ui/comum/chip_de_escolha.dart';
 import 'package:agendamento_clinico/ui/comum/marca.dart';
 import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:agendamento_clinico/ui/conta/criar_conta_screen.dart';
 import 'package:agendamento_clinico/ui/conta/entrar_screen.dart';
 import 'package:agendamento_clinico/ui/conta/esqueci_a_senha_screen.dart';
 import 'package:agendamento_clinico/ui/perfil/perfil_screen.dart';
+import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
 import 'package:agendamento_clinico/ui/shell/shell_screen.dart';
 import 'package:agendamento_clinico/ui/termo/termo_screen.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +48,8 @@ class ApiFalsa {
           'email': 'ana@exemplo.test',
           'telefone': '88999990000',
           'dataNascimento': '1990-03-15',
-          'consentimento': {'versao': '2026-09-v2', 'aceitoEm': '2026-10-06T12:30:00.000Z'},
+          // 22:30 do dia 6 em Quixadá: em UTC, já é dia 7.
+          'consentimento': {'versao': '2026-09-v2', 'aceitoEm': '2026-10-07T01:30:00.000Z'},
         },
       };
 
@@ -64,6 +70,26 @@ class ApiFalsa {
             {'id': 1, 'nome': 'Cardiologia'},
           ],
         }),
+      'GET /profissionais' => json(200, {
+          'profissionais': [
+            {
+              'id': 2,
+              'nome': 'Carlos Eduardo Timbó',
+              'registroConselho': 'CRM-CE 12345',
+              'especialidade': {'id': 1, 'nome': 'Cardiologia'},
+              'valorCentavos': 25000,
+              'valorFormatado': 'R\$ 250,00',
+              'clinica': {
+                'id': 1,
+                'nome': 'Clínica Exemplo Quixadá',
+                'telefone': '(88) 3000-0000',
+                'endereco': 'Centro, Quixadá - CE',
+              },
+            },
+          ],
+          'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
+        }),
+      'GET /profissionais/2/horarios' => json(200, grade()),
       'GET /consentimento/termo-vigente' => json(200, {
           'termo': {'versao': versaoDoTermo},
         }),
@@ -79,15 +105,44 @@ class ApiFalsa {
     };
   });
 
+  /// A grade do cardiologista: três horários livres amanhã, no calendário da
+  /// clínica — amanhã de verdade, pelo relógio de quem roda o teste, como o
+  /// aplicativo o lê.
+  static Map<String, Object?> grade() {
+    final amanha = DataCivil.naClinica(DateTime.now()).maisDias(1);
+    // Hora da clínica mais três: UTC.
+    String instante(int hora, int minuto) =>
+        DateTime.utc(amanha.ano, amanha.mes, amanha.dia, hora + 3, minuto).toIso8601String();
+    return {
+      'periodo': {'de': DateTime.now().toUtc().toIso8601String(), 'ate': instante(21, 0)},
+      'horarios': [
+        for (final (id, hora, minuto) in [(41, 9, 0), (42, 10, 30), (43, 14, 30)])
+          {
+            'id': id,
+            'inicio': instante(hora, minuto),
+            'fim': instante(hora, minuto + 30),
+            'duracaoMinutos': 30,
+            'versao': 0,
+          },
+      ],
+    };
+  }
+
   Iterable<http.Request> pedidosA(String metodo, String caminho) =>
       pedidos.where((p) => p.method == metodo && p.url.path == caminho);
 }
 
-Future<void> montar(WidgetTester tester, AutenticacaoFalsa autenticacao, ApiFalsa api) async {
+Future<void> montar(
+  WidgetTester tester,
+  AutenticacaoFalsa autenticacao,
+  ApiFalsa api, {
+  AbridorDeLinksFalso? abridor,
+}) async {
   await tester.pumpWidget(AplicativoDoPaciente(
     autenticacao: autenticacao,
     cliente: api.cliente,
     base: Uri.parse('https://api.exemplo.test'),
+    abridor: abridor ?? AbridorDeLinksFalso(),
     lerArquivo: lerDoDisco,
   ));
   await tester.pump();
@@ -289,7 +344,53 @@ void main() {
     await sessao(tester, autenticacao, ana);
 
     expect(find.byType(ShellScreen), findsOneWidget);
-    expect(find.text('Cardiologia'), findsOneWidget);
+    // A primeira aba é a busca, já com os profissionais da API.
+    expect(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'), findsOneWidget);
+  });
+
+  testWidgets('o portão em miniatura da Etapa 13: achar um cardiologista e ver os horários de amanhã', (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    final abridor = AbridorDeLinksFalso();
+    await montar(tester, autenticacao, api, abridor: abridor);
+    await sessao(tester, autenticacao, ana);
+
+    // Buscar: a especialidade, e o cardiologista na lista.
+    expect(find.byType(BuscaScreen), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
+    await tester.pumpAndSettle();
+    expect(api.pedidos.last.url.queryParameters, {'especialidade': '1', 'pagina': '1'});
+    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+
+    // O profissional, com a grade pedida sem o token da conta, e amanhã já escolhido.
+    expect(find.byType(ProfissionalScreen), findsOneWidget);
+    final hoje = DataCivil.naClinica(DateTime.now());
+    final grade = api.pedidosA('GET', '/profissionais/2/horarios').single;
+    expect(grade.url.queryParameters, {'ate': hoje.maisDias(14).paraApi()});
+    expect(grade.headers.containsKey('Authorization'), isFalse);
+    expect(find.text('Amanhã', skipOffstage: false), findsWidgets);
+
+    // O telefone da clínica, pelo aparelho.
+    await tester.tap(find.text('Ligar'));
+    await tester.pumpAndSettle();
+    expect(abridor.ligacoes, ['(88) 3000-0000']);
+
+    // Os horários de amanhã ficam mais abaixo: rolando até eles.
+    await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+    for (final hora in ['09:00', '10:30', '14:30']) {
+      expect(find.text(hora, skipOffstage: false), findsOneWidget, reason: hora);
+    }
+    await tester.tap(find.text('14:30'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('14:30 · 30\u00a0min'), findsOneWidget);
+
+    // Voltar leva à busca como estava: a especialidade continua escolhida.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfissionalScreen), findsNothing);
+    expect(tester.widget<ChipDeEscolha>(find.widgetWithText(ChipDeEscolha, 'Cardiologia')).escolhido, isTrue);
+    expect(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'), findsOneWidget);
   });
 
   testWidgets('trocar de área fecha as telas abertas por cima', (tester) async {

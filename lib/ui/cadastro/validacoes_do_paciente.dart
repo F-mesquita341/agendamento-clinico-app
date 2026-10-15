@@ -26,7 +26,7 @@ String? validarTelefone(String? valor) {
 }
 
 /// Opcional: vazio passa.
-String? validarDataDeNascimento(String? valor, {DateTime? hoje}) {
+String? validarDataDeNascimento(String? valor, {DateTime? agora}) {
   final texto = valor ?? '';
   if (texto.isEmpty) return null;
   final partes = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(texto);
@@ -34,7 +34,9 @@ String? validarDataDeNascimento(String? valor, {DateTime? hoje}) {
   final data = DataCivil.tentar(int.parse(partes[3]!), int.parse(partes[2]!), int.parse(partes[1]!));
   if (data == null) return 'Essa data de nascimento não existe no calendário.';
   if (data.ano < 1900) return 'Confira o ano da data de nascimento.';
-  if (data.compareTo(DataCivil.doInstante(hoje ?? DateTime.now())) > 0) {
+  // "Hoje" é o dia na clínica, como na API: perto da meia-noite, o do aparelho
+  // ou o do UTC já pode ser outro.
+  if (data.compareTo(DataCivil.naClinica(agora ?? DateTime.now())) > 0) {
     return 'A data de nascimento não pode estar no futuro.';
   }
   return null;

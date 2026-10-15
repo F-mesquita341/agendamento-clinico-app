@@ -106,7 +106,7 @@ class PerfilScreen extends StatelessWidget {
                   rotulo: 'Termo de consentimento',
                   valor: aceitoEm == null
                       ? 'Versão ${paciente.versaoDoTermo}'
-                      : 'Versão ${paciente.versaoDoTermo}, aceita em ${DataCivil.doInstante(aceitoEm).paraTela()}',
+                      : 'Versão ${paciente.versaoDoTermo}, aceita em ${DataCivil.naClinica(aceitoEm).paraTela()}',
                 ),
                 _Acao(
                   icone: Icons.article_outlined,
