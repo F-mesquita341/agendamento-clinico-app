@@ -47,4 +47,30 @@ class AvisoDeDemora {
     _relogio = null;
     _demorando = false;
   }
+
+  int _noAr = 0;
+  int _rodada = 0;
+
+  /// Acompanha um pedido que pode estar no ar junto com outros — atualizar a
+  /// lista enquanto a página seguinte carrega, por exemplo. A contagem começa
+  /// no primeiro, e o aviso só some quando o último termina: um pedido rápido
+  /// não apaga o aviso de outro que ainda espera. Quem chamou avisa a tela
+  /// depois, como com [parar].
+  Future<T> acompanhar<T>(Future<T> Function() pedido) async {
+    final rodada = _rodada;
+    if (_noAr++ == 0) iniciar();
+    try {
+      return await pedido();
+    } finally {
+      if (rodada == _rodada && --_noAr == 0) parar();
+    }
+  }
+
+  /// Os pedidos acompanhados até aqui deixam de contar: as respostas deles vão
+  /// ser descartadas, e o aviso não fica à vista por causa delas.
+  void esquecerPedidos() {
+    _rodada++;
+    _noAr = 0;
+    parar();
+  }
 }

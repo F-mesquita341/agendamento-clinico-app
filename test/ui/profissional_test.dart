@@ -37,9 +37,10 @@ final timbo = timboNa(clinica);
 final meioDiaDeQuarta = DateTime.utc(2026, 10, 14, 15);
 
 /// Um horário livre, dito no relógio da clínica (UTC−3).
-Horario horario(int id, int dia, int hora, {int minuto = 0, int mes = 10, int versao = 0}) => Horario(
+Horario horario(int id, int dia, int hora, {int minuto = 0, int mes = 10, int ano = 2026, int versao = 0}) =>
+    Horario(
       id: id,
-      inicio: DateTime.utc(2026, mes, dia, hora + 3, minuto),
+      inicio: DateTime.utc(ano, mes, dia, hora + 3, minuto),
       duracaoMinutos: 30,
       versao: versao,
     );
@@ -284,6 +285,33 @@ void main() {
       expect(diasDaFaixa(tester).first, '14/10');
       expect(find.descendant(of: dia('14/10'), matching: find.text('Hoje')), findsOneWidget);
       expect(montagem.catalogo.pedidosDeHorarios.last.ate, DataCivil.tentar(2026, 10, 28));
+    });
+
+    testWidgets('o mês do dia escolhido aparece ao lado de "Escolha o dia", e muda com ele', (tester) async {
+      await montar(tester, horarios: [
+        gradeComum,
+        [...gradeComum, horario(20, 3, 10, mes: 11)],
+      ]);
+      expect(find.text('Outubro'), findsOneWidget);
+
+      await tocar(tester, find.text('Ver mais dias'));
+      await tocar(tester, dia('03/11'));
+
+      expect(find.text('Novembro'), findsOneWidget);
+      expect(find.text('Outubro'), findsNothing);
+    });
+
+    testWidgets('na virada do ano, o mês leva o ano', (tester) async {
+      // Meio-dia de 30/12/2026, com o primeiro horário em janeiro.
+      await montar(
+        tester,
+        horarios: [
+          [horario(1, 4, 9, mes: 1, ano: 2027)],
+        ],
+        agora: DateTime.utc(2026, 12, 30, 15),
+      );
+
+      expect(find.text('Janeiro de 2027'), findsOneWidget);
     });
 
     testWidgets('cada dia diz quantos horários livres tem', (tester) async {
@@ -596,6 +624,139 @@ void main() {
 
       expect(find.text('Este profissional não tem horários livres nos próximos 60 dias.'), findsOneWidget);
       expect(find.text('Ver mais dias'), findsNothing);
+    });
+  });
+
+  group('horário que já começou', () {
+    // 14:00 de quinta, 15/10, em Quixadá: hoje é o dia 15.
+    final duasDaTarde = DateTime.utc(2026, 10, 15, 17);
+    const perdeuAs1430 = 'O horário de qui, 15/10 às 14:30 não está mais livre. Escolha outro.';
+
+    testWidgets('não aparece, nem conta no dia', (tester) async {
+      await montar(
+        tester,
+        horarios: [
+          [horario(1, 15, 8), horario(2, 15, 13), horario(3, 15, 14, minuto: 30), horario(4, 15, 16)],
+        ],
+        agora: duasDaTarde,
+      );
+
+      expect(find.descendant(of: dia('15/10'), matching: find.text('2 horários')), findsOneWidget);
+      expect(find.text('08:00'), findsNothing);
+      expect(find.text('13:00'), findsNothing);
+      expect(find.text('14:30'), findsOneWidget);
+      expect(find.text('16:00'), findsOneWidget);
+    });
+
+    testWidgets('o escolhido que começa com a tela aberta sai da grade, com aviso, sem precisar atualizar', (
+      tester,
+    ) async {
+      final montagem = await montar(
+        tester,
+        horarios: [
+          [horario(1, 15, 14, minuto: 30), horario(2, 15, 16)],
+        ],
+        agora: duasDaTarde,
+      );
+      await tocar(tester, hora('14:30'));
+      expect(montagem.vm.horarioEscolhido?.id, 1);
+
+      Montagem.agora = DateTime.utc(2026, 10, 15, 17, 30);
+      await tester.pump(const Duration(minutes: 30));
+      await tester.pump();
+
+      expect(montagem.vm.horarioEscolhido, isNull);
+      expect(find.text('14:30'), findsNothing);
+      expect(find.text(perdeuAs1430), findsOneWidget);
+      expect(find.text(resumoVazio), findsOneWidget);
+      expect(find.descendant(of: dia('15/10'), matching: find.text('1 horário')), findsOneWidget);
+      // Uma só ida à API: foi o relógio, e não uma atualização.
+      expect(montagem.catalogo.pedidosDeHorarios, hasLength(1));
+    });
+
+    testWidgets('o dia que fica sem horário pelo relógio dá lugar ao primeiro dia com horário', (tester) async {
+      final montagem = await montar(
+        tester,
+        horarios: [
+          [horario(1, 15, 14, minuto: 30), horario(2, 16, 9)],
+        ],
+        agora: duasDaTarde,
+      );
+      expect(montagem.vm.diaEscolhido, DataCivil.tentar(2026, 10, 15));
+
+      Montagem.agora = DateTime.utc(2026, 10, 15, 17, 30);
+      await tester.pump(const Duration(minutes: 30));
+      await tester.pump();
+
+      expect(montagem.vm.diaEscolhido, DataCivil.tentar(2026, 10, 16));
+      expect(marcado(tester, dia('16/10')), isTrue);
+      expect(find.text('09:00'), findsOneWidget);
+    });
+
+    testWidgets('tocado depois de começar, antes de o relógio tirá-lo da tela, não é escolhido', (tester) async {
+      final montagem = await montar(
+        tester,
+        horarios: [
+          [horario(1, 15, 14, minuto: 30), horario(2, 15, 16)],
+        ],
+        agora: duasDaTarde,
+      );
+
+      // Um minuto depois das 14:30, sem o relógio do teste ter andado.
+      Montagem.agora = DateTime.utc(2026, 10, 15, 17, 31);
+      await tocar(tester, hora('14:30'));
+
+      expect(montagem.vm.horarioEscolhido, isNull);
+      expect(find.text(perdeuAs1430), findsOneWidget);
+      expect(find.text('14:30'), findsNothing);
+      expect(find.text(resumoVazio), findsOneWidget);
+    });
+
+    testWidgets('só se escolhe horário desta grade, e com a versão que veio nela', (tester) async {
+      final montagem = await montar(tester, horarios: [gradeComum]);
+
+      montagem.vm.escolherHorario(horario(99, 16, 10));
+      await tester.pump();
+      expect(montagem.vm.horarioEscolhido, isNull);
+      expect(find.text('O horário de sex, 16/10 às 10:00 não está mais livre. Escolha outro.'), findsOneWidget);
+
+      // Mesmo id da grade, com outra versão: vale a da grade, que é a que a API mandou.
+      montagem.vm.escolherHorario(horario(3, 15, 14, minuto: 30, versao: 9));
+      await tester.pump();
+      expect(montagem.vm.horarioEscolhido?.id, 3);
+      expect(montagem.vm.horarioEscolhido?.versao, 0);
+    });
+  });
+
+  group('servidor demorando, com a grade na tela', () {
+    testWidgets('atualizar: depois de 4 s, avisa, e a grade continua', (tester) async {
+      final segunda = Completer<List<Horario>>();
+      await montar(tester, horarios: [gradeComum, segunda]);
+
+      await puxarParaAtualizar(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+      expect(find.text('14:30'), findsOneWidget);
+
+      segunda.complete(gradeComum);
+      await tester.pumpAndSettle();
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+    });
+
+    testWidgets('ver mais dias: depois de 4 s, avisa', (tester) async {
+      final maisDias = Completer<List<Horario>>();
+      await montar(tester, horarios: [gradeComum, maisDias]);
+
+      await tocar(tester, find.text('Ver mais dias'));
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+
+      maisDias.complete(gradeComum);
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
     });
   });
 

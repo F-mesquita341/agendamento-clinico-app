@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -46,6 +47,7 @@ class HorariosViewModel extends ChangeNotifier {
   ErroDaApi? _erroAoAtualizar;
   ErroDaApi? _erroAoVerMaisDias;
   late final _aviso = AvisoDeDemora(espera: esperaAteAvisar, aoMudar: _notificar);
+  Timer? _relogio;
   bool _descartado = false;
 
   /// Cada pedido leva um número, e só a resposta do último vale. Sem isso, uma
@@ -66,8 +68,18 @@ class HorariosViewModel extends ChangeNotifier {
   bool get podeVerMaisDias => _quantosDias < maximoDeDias;
   bool get vendoMaisDias => _vendoMaisDias;
 
-  /// Os horários livres do dia, na ordem. Vazia em dia sem horário.
-  List<Horario> horariosDe(DataCivil dia) => _porDia[dia] ?? const [];
+  /// Os horários livres do dia que ainda não começaram, na ordem. Vazia em dia
+  /// sem horário.
+  ///
+  /// A API só manda horário futuro, mas a tela pode ficar aberta: o das 9:00
+  /// carregado às 8:00 não pode ser escolhido às 9:05.
+  List<Horario> horariosDe(DataCivil dia) {
+    final agora = _agora();
+    return [
+      for (final horario in _porDia[dia] ?? const <Horario>[])
+        if (horario.inicio.isAfter(agora)) horario,
+    ];
+  }
 
   /// O dia cujos horários a tela mostra; null se não há horário em dia nenhum.
   DataCivil? get diaEscolhido => _diaEscolhido;
@@ -120,10 +132,12 @@ class HorariosViewModel extends ChangeNotifier {
     _erroAoAtualizar = null;
     _erroAoVerMaisDias = null;
     _vendoMaisDias = false;
+    _aviso.iniciar();
     _notificar();
 
     final (:grade, :erro) = await _pedir(_quantosDias);
     if (pedido != _pedido) return;
+    _aviso.parar();
     if (grade != null) {
       _mostrar(grade);
     } else {
@@ -137,10 +151,12 @@ class HorariosViewModel extends ChangeNotifier {
     final pedido = ++_pedido;
     _vendoMaisDias = true;
     _erroAoVerMaisDias = null;
+    _aviso.iniciar();
     _notificar();
 
     final (:grade, :erro) = await _pedir(min(_quantosDias + diasPorVez, maximoDeDias));
     if (pedido != _pedido) return;
+    _aviso.parar();
     _vendoMaisDias = false;
     if (grade != null) {
       _mostrar(grade);
@@ -159,9 +175,18 @@ class HorariosViewModel extends ChangeNotifier {
     _notificar();
   }
 
+  /// Escolhe o horário — o da grade, com a versão que veio nela. Horário que
+  /// já começou, ou que não é desta grade, não é escolhido: a tela diz que ele
+  /// não está mais livre. É desta escolha que a Etapa 14 vai agendar.
   void escolherHorario(Horario horario) {
-    _horarioEscolhido = horario;
-    _horarioPerdido = null;
+    final daGrade = _aindaLivre(horario.id);
+    if (daGrade == null) {
+      _horarioPerdido = horario;
+      _reconferir();
+    } else {
+      _horarioEscolhido = daGrade;
+      _horarioPerdido = null;
+    }
     _notificar();
   }
 
@@ -192,19 +217,59 @@ class HorariosViewModel extends ChangeNotifier {
       _porDia.putIfAbsent(horario.dia, () => []).add(horario);
     }
 
-    // O horário escolhido continua escolhido se ainda está livre — com a versão
-    // que veio agora, que é a que vale para agendar. Se não está, a escolha é
-    // desfeita, e a tela diz qual horário se perdeu.
-    final escolhido = _horarioEscolhido;
-    _horarioEscolhido = grade.horarios.where((horario) => horario.id == escolhido?.id).firstOrNull;
-    _horarioPerdido = _horarioEscolhido == null ? escolhido : null;
+    _horarioPerdido = null;
+    _reconferir();
+    _marcarRelogio();
+  }
 
-    // O dia mostrado é sempre um dia com horário: o que estava, se ainda tem
-    // algum; senão, o primeiro que tiver.
+  /// Confere a escolha e o dia contra a grade e o relógio.
+  ///
+  /// O horário escolhido continua escolhido se ainda está livre — com a versão
+  /// que veio na grade, que é a que vale para agendar. Se não está, a escolha é
+  /// desfeita, e a tela diz qual horário se perdeu. E o dia mostrado é sempre
+  /// um dia com horário: o que estava, se ainda tem algum; senão, o primeiro
+  /// que tiver.
+  void _reconferir() {
+    final escolhido = _horarioEscolhido;
+    if (escolhido != null) {
+      _horarioEscolhido = _aindaLivre(escolhido.id);
+      if (_horarioEscolhido == null) _horarioPerdido = escolhido;
+    }
     final mostrado = _diaEscolhido;
     if (mostrado == null || horariosDe(mostrado).isEmpty) {
       _diaEscolhido = dias.where((dia) => horariosDe(dia).isNotEmpty).firstOrNull;
     }
+  }
+
+  /// O horário da grade com este id, se ele ainda não começou.
+  Horario? _aindaLivre(int id) {
+    final agora = _agora();
+    return _porDia.values
+        .expand((doDia) => doDia)
+        .where((horario) => horario.id == id && horario.inicio.isAfter(agora))
+        .firstOrNull;
+  }
+
+  /// Marca o relógio para o começo do próximo horário da grade. Nessa hora ele
+  /// sai da tela, e a escolha e o dia são conferidos de novo — sem a pessoa
+  /// precisar atualizar.
+  void _marcarRelogio() {
+    _relogio?.cancel();
+    // Resposta que chega depois de a tela fechar não deixa relógio para trás.
+    if (_descartado) return;
+    final agora = _agora();
+    DateTime? proximo;
+    for (final horario in _porDia.values.expand((doDia) => doDia)) {
+      if (horario.inicio.isAfter(agora) && (proximo == null || horario.inicio.isBefore(proximo))) {
+        proximo = horario.inicio;
+      }
+    }
+    if (proximo == null) return;
+    _relogio = Timer(proximo.difference(agora), () {
+      _reconferir();
+      _marcarRelogio();
+      _notificar();
+    });
   }
 
   void _notificar() {
@@ -215,6 +280,7 @@ class HorariosViewModel extends ChangeNotifier {
   void dispose() {
     _descartado = true;
     _aviso.parar();
+    _relogio?.cancel();
     super.dispose();
   }
 }

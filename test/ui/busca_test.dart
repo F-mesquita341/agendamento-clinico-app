@@ -43,7 +43,7 @@ const antonio = Profissional(
 );
 
 const mensagemDeDemora = 'O servidor está demorando para responder.';
-const dicaDoCampo = 'Profissional ou especialidade';
+const dicaDoCampo = 'Nome do profissional ou especialidade';
 
 /// Monta a tela com o catálogo dado e espera a primeira resposta. Devolve os
 /// profissionais em que a pessoa tocou.
@@ -761,6 +761,139 @@ void main() {
       expect(find.text('Carlos Eduardo Timbó'), findsOneWidget);
       expect(find.text('Antônio Sales'), findsNothing);
       expect(find.text('1 profissional'), findsOneWidget);
+    });
+  });
+
+  group('servidor demorando, com a lista na tela', () {
+    testWidgets('atualizar: depois de 4 s, avisa no topo, e a lista continua', (tester) async {
+      final segunda = Completer<Pagina<Profissional>>();
+      await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([timbo]),
+        segunda,
+      ]));
+
+      await puxarParaAtualizar(tester);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+      expect(find.text('Carlos Eduardo Timbó'), findsOneWidget);
+
+      segunda.complete(paginaDe([timbo]));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+    });
+
+    testWidgets('mostrar mais: avisa no fim da lista, onde a pessoa está, e o topo não repete', (tester) async {
+      final pagina2 = Completer<Pagina<Profissional>>();
+      await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana], paginas: 2, total: 2),
+        pagina2,
+      ]));
+
+      await tester.tap(find.text('Mostrar mais profissionais'));
+      await tester.pump(const Duration(seconds: 5));
+
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.textContaining(mensagemDeDemora)).dy,
+        greaterThan(tester.getTopLeft(find.text('Ana Beatriz Lopes')).dy),
+      );
+
+      pagina2.complete(paginaDe([timbo], pagina: 2, paginas: 2, total: 2));
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+    });
+
+    testWidgets('atualizar e mostrar mais ao mesmo tempo: o aviso só some quando os dois terminam', (tester) async {
+      final pagina2 = Completer<Pagina<Profissional>>();
+      final atualizacao = Completer<Pagina<Profissional>>();
+      await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana], paginas: 2, total: 2),
+        pagina2,
+        atualizacao,
+      ]));
+      await tester.tap(find.text('Mostrar mais profissionais'));
+      await tester.pump();
+      await puxarParaAtualizar(tester);
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+
+      atualizacao.complete(paginaDe([ana], paginas: 2, total: 2));
+      await tester.pump();
+      await tester.pump();
+      // A página seguinte ainda espera: o aviso continua.
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+
+      pagina2.complete(paginaDe([timbo], pagina: 2, paginas: 2, total: 2));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+    });
+
+    testWidgets('busca nova: a resposta que vai ser descartada não deixa o aviso na tela', (tester) async {
+      final primeira = Completer<Pagina<Profissional>>();
+      await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
+        primeira,
+        paginaDe([timbo]),
+      ]));
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+
+      await tocarNoChip(tester, 'Cardiologia');
+
+      // A busca nova respondeu; a primeira ainda está no ar, mas não importa mais.
+      expect(find.text('Carlos Eduardo Timbó'), findsOneWidget);
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+      primeira.complete(paginaDe([ana]));
+      await tester.pump();
+    });
+  });
+
+  group('mostrar mais, no view model', () {
+    // A tela esconde o botão enquanto a página carrega; estes testes chamam o
+    // view model direto, sem a tela, para a trava não depender dela.
+    test('chamado duas vezes seguidas, pede a página seguinte uma vez só', () async {
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana], paginas: 2, total: 2),
+        paginaDe([timbo], pagina: 2, paginas: 2, total: 2),
+      ]);
+      final vm = BuscaViewModel(catalogo);
+      addTearDown(vm.dispose);
+      await vm.carregar();
+
+      await Future.wait([vm.mostrarMais(), vm.mostrarMais()]);
+
+      expect(catalogo.pedidosDeProfissionais.map((pedido) => pedido.pagina), [1, 2]);
+      expect(vm.profissionais, [ana, timbo]);
+    });
+
+    test('durante uma busca nova, não pede a página seguinte da lista que está saindo', () async {
+      final novaBusca = Completer<Pagina<Profissional>>();
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana], paginas: 2, total: 2),
+        novaBusca,
+      ]);
+      final vm = BuscaViewModel(catalogo);
+      addTearDown(vm.dispose);
+      await vm.carregar();
+      vm.escolherEspecialidade(2);
+
+      await vm.mostrarMais();
+
+      expect(catalogo.pedidosDeProfissionais.map((pedido) => pedido.pagina), [1, 1]);
+      novaBusca.complete(paginaDe([timbo]));
+    });
+
+    test('na última página, não pede nada', () async {
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [paginaDe([ana])]);
+      final vm = BuscaViewModel(catalogo);
+      addTearDown(vm.dispose);
+      await vm.carregar();
+
+      await vm.mostrarMais();
+
+      expect(catalogo.pedidosDeProfissionais, hasLength(1));
     });
   });
 

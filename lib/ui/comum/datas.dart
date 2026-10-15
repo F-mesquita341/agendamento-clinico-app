@@ -8,6 +8,10 @@ import '../../domain/models/data_civil.dart';
 // inicializado antes de uma data aparecer — nem no aplicativo, nem num teste.
 const _porExtenso = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'];
 const _abreviados = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+const _meses = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', //
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
 
 String _dois(int numero) => numero.toString().padLeft(2, '0');
 
@@ -31,6 +35,12 @@ String diaCurto(DataCivil dia, {required DataCivil hoje}) =>
 
 /// "qui" — o rótulo de um dia na faixa de dias.
 String diaAbreviado(DataCivil dia) => _abreviados[dia.diaDaSemana - 1];
+
+/// "outubro" — ou "janeiro de 2027", quando o ano não é o de [hoje].
+String mesDoAno(DataCivil dia, {required DataCivil hoje}) {
+  final mes = _meses[dia.mes - 1];
+  return dia.ano == hoje.ano ? mes : '$mes de ${dia.ano}';
+}
 
 /// "Hoje" e "Amanhã", para os dois dias em que o nome diz mais que a data;
 /// null para os outros.

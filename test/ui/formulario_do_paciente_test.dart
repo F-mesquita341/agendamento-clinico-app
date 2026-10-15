@@ -103,6 +103,18 @@ void main() {
       expect(formatarTelefone('559999900001'), '(55) 99999-0000');
     });
 
+    test('fixo com o 55 na frente e sem o "+": os 12 dígitos viram código do país, DDD e número', () {
+      expect(formatarTelefone('558830000000'), '(88) 3000-0000');
+      expect(formatarTelefone('55 (88) 3000-0000'), '(88) 3000-0000');
+    });
+
+    test('12 dígitos com 55 que podem ser outra coisa continuam como antes, à vista no campo', () {
+      // DDD 91 a 99: pode ser o 55 do país, ou um celular de DDD 55 com um dígito a mais.
+      expect(formatarTelefone('559130000000'), '(55) 91300-0000');
+      // Depois do DDD, um número que não começa como fixo (6 a 9).
+      expect(formatarTelefone('558890000000'), '(55) 88900-0000');
+    });
+
     test('data no formato do preenchimento automático (AAAA-MM-DD) é reordenada', () {
       expect(formatarData('1990-03-15'), '15/03/1990');
     });

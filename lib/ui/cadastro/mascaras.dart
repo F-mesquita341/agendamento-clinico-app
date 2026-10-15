@@ -16,12 +16,14 @@ String digitos(String texto, {int? limite}) {
 /// Número com o código do Brasil — o preenchimento automático do Android e o
 /// "colar" costumam trazer `+55 88 99999-0000` — perde o 55: cortar pelo fim
 /// guardaria outro telefone, válido e errado, sem ninguém perceber. Só nos
-/// casos sem ambiguidade: o "+55" na frente, ou 13 dígitos começando por 55,
-/// que só chegam colados. Quem tem DDD 55 e digita um dígito a mais continua
-/// com o excedente ignorado, como qualquer outro DDD.
+/// casos sem ambiguidade: o "+55" na frente, 13 dígitos começando por 55, ou um
+/// fixo com o 55 e sem o "+" ([_fixoComCodigoDoPais]). Quem tem DDD 55 e digita
+/// um dígito a mais continua com o excedente ignorado, como qualquer outro DDD.
 String formatarTelefone(String texto) {
   var d = digitos(texto);
-  final comCodigoDoPais = texto.trimLeft().startsWith('+55') || (d.length == 13 && d.startsWith('55'));
+  final comCodigoDoPais = texto.trimLeft().startsWith('+55') ||
+      (d.length == 13 && d.startsWith('55')) ||
+      _fixoComCodigoDoPais(d);
   if (comCodigoDoPais) d = d.substring(2);
   if (d.length > 11) d = d.substring(0, 11);
   if (d.isEmpty) return '';
@@ -32,6 +34,14 @@ String formatarTelefone(String texto) {
   final corte = d.length == 11 ? 5 : 4;
   return '($ddd) ${numero.substring(0, corte)}-${numero.substring(corte)}';
 }
+
+/// "558830000000": o 55 do Brasil, um DDD e um telefone fixo, que começa de 2 a
+/// 5. Doze dígitos nunca são um número nacional, mas um celular de DDD 55 com
+/// um dígito a mais também tem doze — e celular começa com 9: por isso o
+/// terceiro dígito decide. Com DDD 91 a 99 as duas leituras são possíveis, e
+/// vale a de sempre, que a pessoa vê no campo.
+bool _fixoComCodigoDoPais(String d) =>
+    d.length == 12 && d.startsWith('55') && d[2] != '9' && '2345'.contains(d[4]);
 
 /// `dd/mm/aaaa`. Data que chega inteira no formato `AAAA-MM-DD` — o do
 /// preenchimento automático — é reordenada, em vez de virar "19/90/0315".

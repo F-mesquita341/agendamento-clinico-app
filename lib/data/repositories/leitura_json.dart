@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/pagina.dart';
 
@@ -12,15 +14,15 @@ List<T> lerLista<T>(
   T Function(Map<String, Object?> json) converter,
 ) {
   try {
-    if (corpo is! Map<String, Object?>) throw const FormatException('corpo');
+    if (corpo is! Map<String, Object?>) throw const FormatException('o corpo não é um objeto.');
     final lista = corpo[chave];
-    if (lista is! List<Object?>) throw FormatException(chave);
+    if (lista is! List<Object?>) throw const FormatException('não veio uma lista.');
     return [
       for (final item in lista)
-        if (item is Map<String, Object?>) converter(item) else throw FormatException(chave),
+        if (item is Map<String, Object?>) converter(item) else throw const FormatException('um item não é um objeto.'),
     ];
-  } on FormatException {
-    throw const ErroDaApi.respostaInesperada(200);
+  } on FormatException catch (erro) {
+    throw _foraDoFormato(chave, erro.message);
   }
 }
 
@@ -43,7 +45,7 @@ Pagina<T> lerPagina<T>(
       return Pagina(itens: itens, pagina: pagina, paginas: paginas, total: total);
     }
   }
-  throw const ErroDaApi.respostaInesperada(200);
+  throw _foraDoFormato(chave, 'a paginação não veio, ou veio fora do formato.');
 }
 
 /// Lê um recurso embrulhado no próprio nome — `{paciente: {...}}` —, que é a
@@ -55,11 +57,20 @@ T lerObjeto<T>(
   T Function(Map<String, Object?> json) converter,
 ) {
   try {
-    if (corpo is! Map<String, Object?>) throw const FormatException('corpo');
+    if (corpo is! Map<String, Object?>) throw const FormatException('o corpo não é um objeto.');
     final objeto = corpo[chave];
-    if (objeto is! Map<String, Object?>) throw FormatException(chave);
+    if (objeto is! Map<String, Object?>) throw const FormatException('não veio um objeto.');
     return converter(objeto);
-  } on FormatException {
-    throw const ErroDaApi.respostaInesperada(200);
+  } on FormatException catch (erro) {
+    throw _foraDoFormato(chave, erro.message);
   }
+}
+
+/// Para a tela, resposta fora do formato é só `RESPOSTA_INESPERADA`. No log do
+/// aparelho fica qual recurso e por quê: é por ali que uma mudança na API se
+/// descobre no portão ou numa sessão. Não é defeito do aplicativo, e por isso
+/// não passa por `relatarDefeito`.
+ErroDaApi _foraDoFormato(String chave, String motivo) {
+  debugPrint('Resposta fora do formato em "$chave": $motivo');
+  return const ErroDaApi.respostaInesperada(200);
 }
