@@ -6,7 +6,6 @@ import '../../domain/models/profissional.dart';
 import '../busca/busca_screen.dart';
 import '../busca/busca_view_model.dart';
 import '../perfil/perfil_screen.dart';
-import '../profissional/horarios_view_model.dart';
 import '../profissional/profissional_screen.dart';
 
 /// O aplicativo de quem tem conta e cadastro: a barra de navegação de baixo,
@@ -24,16 +23,9 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _aba = 0;
 
-  /// Abre o profissional por cima da barra de baixo. O view model da tela
-  /// nasce aqui, com quem a abre: na Etapa 14, o resumo da consulta volta para
-  /// ela com o dia e o horário ainda escolhidos (checklist, item 3.1).
+  /// Abre o profissional por cima da barra de baixo.
   void _abrir(BuildContext context, Profissional profissional) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ChangeNotifierProvider(
-        create: (contexto) => HorariosViewModel(contexto.read<RepositorioDoCatalogo>(), profissional)..carregar(),
-        child: const ProfissionalScreen(),
-      ),
-    ));
+    Navigator.of(context).push(rotaDoProfissional(profissional));
   }
 
   @override

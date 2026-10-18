@@ -1,4 +1,5 @@
 import '../../domain/models/data_civil.dart';
+import 'textos.dart';
 
 // Como as datas aparecem para o paciente (checklist, item 2.4): o dia da
 // semana por extenso, dia e mês, e o ano só quando não for o corrente.
@@ -48,4 +49,12 @@ String? diaRelativo(DataCivil dia, {required DataCivil hoje}) {
   if (dia == hoje) return 'Hoje';
   if (dia == hoje.maisDias(1)) return 'Amanhã';
   return null;
+}
+
+/// "Amanhã, quinta-feira, 15/10", ou "Segunda-feira, 19/10" — o dia com tudo
+/// o que o identifica, para começar uma linha.
+String diaPorInteiro(DataCivil dia, {required DataCivil hoje}) {
+  final relativo = diaRelativo(dia, hoje: hoje);
+  final porExtenso = diaPorExtenso(dia, hoje: hoje);
+  return relativo == null ? comInicialMaiuscula(porExtenso) : '$relativo, $porExtenso';
 }

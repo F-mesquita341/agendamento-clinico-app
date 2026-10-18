@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'config/ambiente.dart';
 import 'config/tema.dart';
+import 'data/repositories/repositorio_de_consultas.dart';
 import 'data/repositories/repositorio_do_catalogo.dart';
 import 'data/repositories/repositorio_do_consentimento.dart';
 import 'data/repositories/repositorio_do_paciente.dart';
@@ -91,6 +92,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
         Provider<ServicoDeAutenticacao>.value(value: widget.autenticacao),
         Provider<AbridorDeLinks>.value(value: widget.abridor),
         Provider<RepositorioDoCatalogo>(create: (_) => RepositorioDoCatalogoRemoto(_api)),
+        Provider<RepositorioDeConsultas>(create: (_) => RepositorioDeConsultasRemoto(_api)),
         Provider<RepositorioDoPaciente>(create: (_) => RepositorioDoPacienteRemoto(_api)),
         Provider<RepositorioDoConsentimento>(create: (_) => RepositorioDoConsentimentoRemoto(_api)),
         ChangeNotifierProvider<SessaoViewModel>.value(value: _sessao),

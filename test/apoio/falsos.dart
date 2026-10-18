@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_consentimento.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
+import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
@@ -175,6 +177,31 @@ class CatalogoFalso implements RepositorioDoCatalogo {
   }
 }
 
+/// As consultas em memória, com uma fila de respostas para cada pedido e o
+/// registro do que foi pedido.
+class ConsultasFalso implements RepositorioDeConsultas {
+  ConsultasFalso({Iterable<Object?> agendar = const [], Iterable<Object?> minhas = const []})
+      : respostasDeAgendar = Fila(agendar),
+        respostasDeMinhas = Fila(minhas);
+
+  final Fila respostasDeAgendar;
+  final Fila respostasDeMinhas;
+  final pedidosDeAgendar = <({int horarioId, int versao})>[];
+  final pedidosDeMinhas = <int>[];
+
+  @override
+  Future<Consulta> agendar({required int horarioId, required int versao}) {
+    pedidosDeAgendar.add((horarioId: horarioId, versao: versao));
+    return respostasDeAgendar.proxima<Consulta>();
+  }
+
+  @override
+  Future<Pagina<Consulta>> minhas({int pagina = 1}) {
+    pedidosDeMinhas.add(pagina);
+    return respostasDeMinhas.proxima<Pagina<Consulta>>();
+  }
+}
+
 /// O discador e o mapa em memória: registra o que seria aberto, e responde
 /// se o aparelho "conseguiu" abrir.
 class AbridorDeLinksFalso implements AbridorDeLinks {
@@ -200,6 +227,29 @@ class AbridorDeLinksFalso implements AbridorDeLinks {
 /// Uma página de profissionais; sem mais nada dito, a única.
 Pagina<Profissional> paginaDe(List<Profissional> itens, {int pagina = 1, int paginas = 1, int? total}) =>
     Pagina(itens: itens, pagina: pagina, paginas: paginas, total: total ?? itens.length);
+
+/// Uma página de consultas; sem mais nada dito, a única.
+Pagina<Consulta> paginaDeConsultas(List<Consulta> itens, {int pagina = 1, int paginas = 1}) =>
+    Pagina(itens: itens, pagina: pagina, paginas: paginas, total: itens.length);
+
+/// A consulta que reserva o [horario]: aguardando pagamento, com o prazo
+/// [expiraEm], como o agendamento a devolve — sem o horário dentro. Com
+/// [comHorario], como as listagens a trazem.
+Consulta reservaDe(
+  Horario horario, {
+  required DateTime expiraEm,
+  int id = 50,
+  StatusDaConsulta status = StatusDaConsulta.pendentePagamento,
+  bool comHorario = false,
+}) =>
+    Consulta(
+      id: id,
+      status: status,
+      horarioId: horario.id,
+      valorFormatado: 'R\$ 250,00',
+      reservaExpiraEm: expiraEm,
+      horario: comHorario ? horario : null,
+    );
 
 /// Lê os arquivos do termo direto do disco, como o aplicativo os lê do pacote.
 Future<String> lerDoDisco(String caminho) => Future.value(File(caminho).readAsStringSync());

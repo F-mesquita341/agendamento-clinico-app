@@ -28,6 +28,6 @@ abstract final class Textos {
 /// na outra.
 String semQuebra(String texto) => texto.replaceAll(' ', '\u00a0');
 
-/// O mesmo texto, com a primeira letra mai\u00fascula: as datas s\u00e3o escritas para
-/// o meio de uma frase ("qui, 15/10"), e \u00e0s vezes come\u00e7am uma.
+/// O mesmo texto, com a primeira letra maiúscula: as datas são escritas para
+/// o meio de uma frase ("qui, 15/10"), e às vezes começam uma.
 String comInicialMaiuscula(String texto) => texto.isEmpty ? texto : texto[0].toUpperCase() + texto.substring(1);
