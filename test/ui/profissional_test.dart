@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:agendamento_clinico/config/tema.dart';
+import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.dart';
+import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
-import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
 import 'package:agendamento_clinico/ui/profissional/horarios_view_model.dart';
@@ -15,35 +16,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/agenda.dart';
 import '../apoio/falsos.dart';
-
-const clinica = Clinica(
-  nome: 'Clínica Exemplo Quixadá',
-  telefone: '(88) 3000-0000',
-  endereco: 'Centro, Quixadá - CE',
-);
-
-Profissional timboNa(Clinica? clinica) => Profissional(
-      id: 2,
-      nome: 'Carlos Eduardo Timbó',
-      registroConselho: 'CRM-CE 12345',
-      valorFormatado: 'R\$ 250,00',
-      especialidade: const Especialidade(id: 2, nome: 'Cardiologia'),
-      clinica: clinica,
-    );
-final timbo = timboNa(clinica);
-
-/// Meio-dia de quarta-feira, 14/10/2026, em Quixadá.
-final meioDiaDeQuarta = DateTime.utc(2026, 10, 14, 15);
-
-/// Um horário livre, dito no relógio da clínica (UTC−3).
-Horario horario(int id, int dia, int hora, {int minuto = 0, int mes = 10, int ano = 2026, int versao = 0}) =>
-    Horario(
-      id: id,
-      inicio: DateTime.utc(ano, mes, dia, hora + 3, minuto),
-      duracaoMinutos: 30,
-      versao: versao,
-    );
 
 /// A grade de sempre: nada hoje, três horários amanhã (quinta) e um na sexta.
 final gradeComum = [
@@ -57,11 +31,12 @@ const mensagemDeDemora = 'O servidor está demorando para responder.';
 const resumoVazio = 'Escolha um horário';
 
 class Montagem {
-  Montagem(this.catalogo, this.abridor, this.vm);
+  Montagem(this.catalogo, this.abridor, this.vm, this.consultas);
 
   final CatalogoFalso catalogo;
   final AbridorDeLinksFalso abridor;
   final HorariosViewModel vm;
+  final ConsultasFalso consultas;
 
   /// O relógio que o view model lê: o teste o adianta para virar o dia.
   static DateTime agora = meioDiaDeQuarta;
@@ -76,6 +51,7 @@ Future<Montagem> montar(
   bool abre = true,
   Size tela = const Size(400, 1600),
   DateTime? agora,
+  ConsultasFalso? consultas,
 }) async {
   tester.view.physicalSize = tela;
   tester.view.devicePixelRatio = 1;
@@ -84,21 +60,25 @@ Future<Montagem> montar(
 
   final catalogo = CatalogoFalso(horarios: horarios);
   final abridor = AbridorDeLinksFalso(consegue: abre);
+  final agendamentos = consultas ?? ConsultasFalso();
   final vm = HorariosViewModel(catalogo, profissional ?? timbo, agora: () => Montagem.agora);
-  await tester.pumpWidget(MaterialApp(
-    theme: temaDoApp(),
-    home: MultiProvider(
-      providers: [
-        Provider<AbridorDeLinks>.value(value: abridor),
-        ChangeNotifierProvider(create: (_) => vm..carregar()),
-      ],
-      child: const ProfissionalScreen(),
+  // Os repositórios ficam acima do MaterialApp, como no aplicativo: as telas
+  // abertas por cima da grade — o resumo, o pagamento — também os enxergam.
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      Provider<AbridorDeLinks>.value(value: abridor),
+      Provider<RepositorioDoCatalogo>.value(value: catalogo),
+      Provider<RepositorioDeConsultas>.value(value: agendamentos),
+    ],
+    child: MaterialApp(
+      theme: temaDoApp(),
+      home: ChangeNotifierProvider(create: (_) => vm..carregar(), child: const ProfissionalScreen()),
     ),
   ));
   await tester.pump();
   // A faixa de dias traz o dia escolhido para a vista depois de desenhada.
   await tester.pump();
-  return Montagem(catalogo, abridor, vm);
+  return Montagem(catalogo, abridor, vm, agendamentos);
 }
 
 /// O botão de um dia da faixa, achado pela data escrita nele — esteja ele à
@@ -1066,6 +1046,225 @@ void main() {
       expect(tester.getSize(dia('15/10')).height, greaterThanOrEqualTo(88));
       // Os dias têm todos a mesma altura, o de uma linha e o de duas.
       expect(tester.getSize(dia('14/10')).height, tester.getSize(dia('15/10')).height);
+    });
+  });
+
+  group('continuar e conflito', () {
+    const conflito = ErroDaApi(
+      status: 409,
+      codigo: 'HORARIO_INDISPONIVEL',
+      mensagem: 'Este horário acabou de ser reservado por outro paciente.',
+      acao: AcaoSugerida.recarregarHorarios,
+    );
+
+    /// A grade depois que outra pessoa reservou as 14:30: entrou um horário às
+    /// 15:00, que a grade antiga não tinha.
+    final gradeNova = [horario(1, 15, 8), horario(2, 15, 11, minuto: 30), horario(5, 15, 15), horario(4, 16, 9)];
+
+    Finder continuar() => find.text('Continuar');
+    Finder confirmar() => find.text('Confirmar e ir para o pagamento');
+    Finder naFolha(String texto) => find.descendant(of: find.byType(BottomSheet), matching: find.text(texto));
+    const tituloDoConflito = 'Esse horário não está mais livre';
+
+    /// Escolhe as 14:30, abre o resumo e confirma — e a API diz que outra
+    /// pessoa chegou antes.
+    Future<void> perderAs1430(WidgetTester tester) async {
+      await tocar(tester, hora('14:30'));
+      await tester.tap(continuar());
+      await tester.pumpAndSettle();
+      await tester.tap(confirmar());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a barra diz em que etapa do agendamento se está', (tester) async {
+      await montar(tester, horarios: [gradeComum]);
+
+      expect(find.text('Etapa 1 de 3'), findsOneWidget);
+    });
+
+    testWidgets('"Continuar" sem horário diz o que falta, e não abre o resumo', (tester) async {
+      await montar(tester, horarios: [gradeComum]);
+
+      await tester.tap(continuar());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escolha um horário para continuar.'), findsOneWidget);
+      expect(find.text('Resumo da consulta'), findsNothing);
+    });
+
+    testWidgets('"Continuar" abre o resumo do horário escolhido; voltar devolve a grade com a escolha', (tester) async {
+      final montagem = await montar(tester, horarios: [gradeComum]);
+      await tocar(tester, hora('14:30'));
+
+      await tester.tap(continuar());
+      await tester.pumpAndSettle();
+      expect(find.text('Resumo da consulta'), findsOneWidget);
+      expect(find.text('Amanhã, quinta-feira, 15/10 · 14:30'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Escolher horário'), findsOneWidget);
+      expect(marcado(tester, hora('14:30')), isTrue);
+      expect(montagem.vm.diaEscolhido, DataCivil.tentar(2026, 10, 15));
+      expect(montagem.vm.horarioEscolhido?.id, 3);
+      // Voltar não pede a grade de novo.
+      expect(montagem.catalogo.pedidosDeHorarios, hasLength(1));
+    });
+
+    testWidgets('o resumo agenda o horário da grade, com a versão que veio nela', (tester) async {
+      // A recarga que vem depois do conflito volta vazia: o que importa aqui é
+      // o pedido.
+      final montagem = await montar(
+        tester,
+        horarios: [
+          [horario(3, 15, 14, minuto: 30, versao: 9)],
+          <Horario>[],
+        ],
+        consultas: ConsultasFalso(agendar: [conflito]),
+      );
+
+      await perderAs1430(tester);
+
+      expect(montagem.consultas.pedidosDeAgendar, [(horarioId: 3, versao: 9)]);
+    });
+
+    testWidgets('conflito: o horário sai da grade na hora, e a folha só aparece com a grade recarregada', (
+      tester,
+    ) async {
+      final recarga = Completer<List<Horario>>();
+      final montagem = await montar(
+        tester,
+        horarios: [gradeComum, recarga],
+        consultas: ConsultasFalso(agendar: [conflito]),
+      );
+
+      await perderAs1430(tester);
+
+      // De volta à grade, o resumo fechado, a recarga no ar.
+      expect(find.text('Resumo da consulta'), findsNothing);
+      expect(montagem.catalogo.pedidosDeHorarios, hasLength(2));
+      expect(find.text('14:30', skipOffstage: false), findsNothing);
+      expect(find.text(tituloDoConflito), findsNothing);
+
+      recarga.complete(gradeNova);
+      await tester.pumpAndSettle();
+
+      expect(find.text(tituloDoConflito), findsOneWidget);
+      expect(
+        find.text('Este horário acabou de ser reservado por outro paciente. A lista de horários já foi atualizada.'),
+        findsOneWidget,
+      );
+      expect(montagem.vm.horarioEscolhido, isNull);
+    });
+
+    testWidgets('as sugestões são os horários livres mais próximos, da grade nova, a partir do dia perdido', (
+      tester,
+    ) async {
+      await montar(tester, horarios: [gradeComum, gradeNova], consultas: ConsultasFalso(agendar: [conflito]));
+
+      await perderAs1430(tester);
+
+      expect(find.text('Horários livres mais próximos'), findsOneWidget);
+      // Cada uma em duas linhas: a hora, e o dia embaixo.
+      for (final hora in ['08:00', '11:30', '15:00', '09:00']) {
+        expect(naFolha(hora), findsOneWidget, reason: hora);
+      }
+      expect(naFolha('Qui, 15/10'), findsNWidgets(3));
+      expect(naFolha('Sex, 16/10'), findsOneWidget);
+      expect(naFolha('14:30'), findsNothing);
+    });
+
+    testWidgets('tocar numa sugestão escolhe o horário e já abre o resumo dele', (tester) async {
+      final montagem = await montar(
+        tester,
+        horarios: [gradeComum, gradeNova],
+        consultas: ConsultasFalso(agendar: [conflito]),
+      );
+      await perderAs1430(tester);
+
+      await tester.tap(naFolha('15:00'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(tituloDoConflito), findsNothing);
+      expect(find.text('Resumo da consulta'), findsOneWidget);
+      expect(find.text('Amanhã, quinta-feira, 15/10 · 15:00'), findsOneWidget);
+      expect(montagem.vm.horarioEscolhido?.id, 5);
+    });
+
+    testWidgets('"Ver todos os horários" fecha a folha e deixa a grade nova, sem escolha', (tester) async {
+      await montar(tester, horarios: [gradeComum, gradeNova], consultas: ConsultasFalso(agendar: [conflito]));
+      await perderAs1430(tester);
+
+      await tester.tap(find.text('Ver todos os horários'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(tituloDoConflito), findsNothing);
+      expect(find.text('Escolher horário'), findsOneWidget);
+      expect(find.text(resumoVazio), findsOneWidget);
+      expect(find.text('15:00'), findsOneWidget);
+    });
+
+    testWidgets('a recarga que falha: o horário perdido não volta, e a folha diz que a lista não foi atualizada', (
+      tester,
+    ) async {
+      await montar(
+        tester,
+        horarios: [gradeComum, const ErroDaApi.semConexao()],
+        consultas: ConsultasFalso(agendar: [conflito]),
+      );
+
+      await perderAs1430(tester);
+
+      expect(find.text(tituloDoConflito), findsOneWidget);
+      expect(find.text('Este horário acabou de ser reservado por outro paciente.'), findsOneWidget);
+      expect(find.textContaining('A lista de horários já foi atualizada'), findsNothing);
+      expect(find.textContaining('Não foi possível atualizar a lista de horários.'), findsOneWidget);
+      expect(find.text('Horários livres mais próximos'), findsNothing);
+
+      await tester.tap(find.text('Ver todos os horários'));
+      await tester.pumpAndSettle();
+      expect(find.text('14:30', skipOffstage: false), findsNothing);
+      expect(find.textContaining('Não foi possível atualizar.'), findsOneWidget);
+      // Quem explicou foi a folha: a grade não repete que o horário se perdeu.
+      expect(find.textContaining('não está mais livre. Escolha outro.'), findsNothing);
+    });
+
+    testWidgets('as sugestões começam no dia do horário perdido, e são quatro no máximo', (tester) async {
+      final montagem = await montar(
+        tester,
+        horarios: [
+          [
+            horario(1, 15, 8),
+            for (final (id, hora) in [(4, 9), (5, 10), (6, 11), (7, 14), (8, 15)]) horario(id, 16, hora),
+          ],
+        ],
+      );
+
+      expect(
+        montagem.vm.proximosLivres(aPartirDe: DataCivil.tentar(2026, 10, 16)!).map((h) => h.id),
+        [4, 5, 6, 7],
+      );
+    });
+
+    testWidgets('o leitor de tela anuncia a escolha, e não o botão', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await montar(tester, horarios: [gradeComum]);
+
+      final anunciado = tester.getSemantics(find.text(resumoVazio));
+      expect(anunciado.flagsCollection.isLiveRegion, isTrue);
+      expect(anunciado.label, isNot(contains('Continuar')));
+      semantica.dispose();
+    });
+
+    testWidgets('a 200%, a escolha e o botão ficam um embaixo do outro, só com a escolha', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await montar(tester, horarios: [gradeComum], tela: const Size(411, 1600));
+      await tocar(tester, hora('14:30'));
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(continuar()).top, greaterThan(tester.getRect(find.textContaining('14:30 ·')).bottom));
+      expect(find.textContaining('Carlos Eduardo Timbó ·'), findsNothing);
     });
   });
 }

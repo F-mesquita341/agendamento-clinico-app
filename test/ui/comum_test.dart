@@ -31,6 +31,39 @@ void main() {
       expect(find.bySemanticsLabel(RegExp('Entrar, enviando')), findsOneWidget);
     });
 
+    testWidgets('enviando com o que dizer: o indicador e o texto, e o leitor lê o texto', (tester) async {
+      var toques = 0;
+      await montar(
+        tester,
+        BotaoPrincipal(
+          rotulo: 'Confirmar',
+          aoTocar: () => toques++,
+          enviando: true,
+          rotuloEnviando: 'Reservando o horário…',
+        ),
+      );
+
+      await tester.tap(find.byType(FilledButton));
+      await tester.pump();
+
+      expect(toques, 0);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Reservando o horário…'), findsOneWidget);
+      expect(find.text('Confirmar'), findsNothing);
+      expect(find.bySemanticsLabel('Reservando o horário…'), findsOneWidget);
+    });
+
+    testWidgets('fora do envio, o texto de enviando não aparece', (tester) async {
+      await montar(
+        tester,
+        BotaoPrincipal(rotulo: 'Confirmar', aoTocar: () {}, rotuloEnviando: 'Reservando o horário…'),
+      );
+
+      expect(find.text('Confirmar'), findsOneWidget);
+      expect(find.text('Reservando o horário…'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
     testWidgets('fora do envio, toca e mostra o rótulo', (tester) async {
       var toques = 0;
       await montar(tester, BotaoPrincipal(rotulo: 'Entrar', aoTocar: () => toques++));

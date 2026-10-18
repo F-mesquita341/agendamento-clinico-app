@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'espaco.dart';
+
 /// Os botões do aplicativo, um para cada papel (checklist, item 4.2). A ação
 /// principal de uma tela é sempre um [BotaoPrincipal], em largura total, e só
 /// existe uma por tela (item 8.1).
@@ -9,6 +11,7 @@ class BotaoPrincipal extends StatelessWidget {
     required this.rotulo,
     required this.aoTocar,
     this.enviando = false,
+    this.rotuloEnviando,
   });
 
   final String rotulo;
@@ -19,13 +22,17 @@ class BotaoPrincipal extends StatelessWidget {
   /// pedido, e a pessoa vê que o primeiro foi recebido.
   final bool enviando;
 
+  /// O que o botão diz enquanto envia, ao lado do indicador — "Reservando o
+  /// horário…" —, quando a espera merece ser dita. Sem ele, só o indicador.
+  final String? rotuloEnviando;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       child: FilledButton(
         onPressed: enviando ? null : aoTocar,
-        child: _Conteudo(rotulo: rotulo, enviando: enviando),
+        child: _Conteudo(rotulo: rotulo, enviando: enviando, rotuloEnviando: rotuloEnviando),
       ),
     );
   }
@@ -87,21 +94,33 @@ class BotaoDeTexto extends StatelessWidget {
 }
 
 class _Conteudo extends StatelessWidget {
-  const _Conteudo({required this.rotulo, required this.enviando});
+  const _Conteudo({required this.rotulo, required this.enviando, this.rotuloEnviando});
 
   final String rotulo;
   final bool enviando;
+  final String? rotuloEnviando;
+
+  static const _indicador = SizedBox.square(
+    dimension: 20,
+    child: CircularProgressIndicator(strokeWidth: 2.5),
+  );
 
   @override
   Widget build(BuildContext context) {
     if (!enviando) return Text(rotulo, textAlign: TextAlign.center);
+    final dizendo = rotuloEnviando;
+    if (dizendo != null) {
+      // O texto já diz que o botão está ocupado, e é ele que o leitor de tela lê.
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: Espaco.pequeno + 4,
+        children: [
+          const ExcludeSemantics(child: _indicador),
+          Flexible(child: Text(dizendo, textAlign: TextAlign.center)),
+        ],
+      );
+    }
     // O leitor de tela continua sabendo que botão é, e que está ocupado.
-    return Semantics(
-      label: '$rotulo, enviando',
-      child: const SizedBox.square(
-        dimension: 20,
-        child: CircularProgressIndicator(strokeWidth: 2.5),
-      ),
-    );
+    return Semantics(label: '$rotulo, enviando', child: _indicador);
   }
 }

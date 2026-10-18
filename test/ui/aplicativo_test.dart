@@ -101,14 +101,31 @@ class ApiFalsa {
           return json(201, perfil());
         }(),
       'PATCH /pacientes/me' => json(200, perfil(nome: 'Ana Lima Sá')),
+      // A reserva do horário pedido, aguardando pagamento por 15 minutos.
+      'POST /consultas' => json(201, {
+          'consulta': {
+            'id': 90,
+            'status': 'pendente_pagamento',
+            'motivoCancelamento': null,
+            'horarioId': (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId'],
+            'valorCentavos': 25000,
+            'valorFormatado': 'R\$ 250,00',
+            'reservaExpiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
+            'criadoEm': DateTime.now().toUtc().toIso8601String(),
+          },
+        }),
+      'GET /consultas' => json(200, {
+          'consultas': <Object>[],
+          'paginacao': {'pagina': 1, 'limite': 20, 'total': 0, 'paginas': 1},
+        }),
       _ => json(404, erro('ROTA_NAO_ENCONTRADA', 'Não existe $rota nesta API.')),
     };
   });
 
   /// A grade do cardiologista: três horários livres amanhã, no calendário da
   /// clínica — amanhã de verdade, pelo relógio de quem roda o teste, como o
-  /// aplicativo o lê.
-  static Map<String, Object?> grade() {
+  /// aplicativo o lê. Sem os de [tirar], que outra pessoa reservou.
+  static Map<String, Object?> grade({Set<int> tirar = const {}}) {
     final amanha = DataCivil.naClinica(DateTime.now()).maisDias(1);
     // Hora da clínica mais três: UTC.
     String instante(int hora, int minuto) =>
@@ -117,7 +134,7 @@ class ApiFalsa {
       'periodo': {'de': DateTime.now().toUtc().toIso8601String(), 'ate': instante(21, 0)},
       'horarios': [
         for (final (id, hora, minuto) in [(41, 9, 0), (42, 10, 30), (43, 14, 30)])
-          {
+          if (!tirar.contains(id)) {
             'id': id,
             'inicio': instante(hora, minuto),
             'fim': instante(hora, minuto + 30),
@@ -391,6 +408,78 @@ void main() {
     expect(find.byType(ProfissionalScreen), findsNothing);
     expect(tester.widget<ChipDeEscolha>(find.widgetWithText(ChipDeEscolha, 'Cardiologia')).escolhido, isTrue);
     expect(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'), findsOneWidget);
+  });
+
+  testWidgets('o portão em miniatura da Etapa 14: outra pessoa reserva antes, a grade recarrega, e o outro horário fica reservado', (
+    tester,
+  ) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
+    await sessao(tester, autenticacao, ana);
+
+    // O cardiologista, e as 14:30 de amanhã.
+    await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+    expect(find.text('Etapa 1 de 3'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('14:30'));
+    await tester.pumpAndSettle();
+
+    // Entre a grade e a confirmação, outra pessoa reserva as 14:30: a API
+    // recusa pela versão, e a grade nova já vem sem elas.
+    api.forcadas['POST /consultas'] = ApiFalsa.json(
+      409,
+      ApiFalsa.erro(
+        'HORARIO_INDISPONIVEL',
+        'Este horário acabou de ser reservado por outro paciente.',
+        'recarregar_horarios',
+      ),
+    );
+    api.forcadas['GET /profissionais/2/horarios'] = ApiFalsa.json(200, ApiFalsa.grade(tirar: {43}));
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Resumo da consulta'), findsOneWidget);
+    expect(find.text('Etapa 2 de 3'), findsOneWidget);
+    await tester.tap(find.text('Confirmar e ir para o pagamento'));
+    await tester.pumpAndSettle();
+
+    // O pedido levou o horário e a versão da grade, com o token da conta.
+    final primeira = api.pedidosA('POST', '/consultas').single;
+    expect(jsonDecode(primeira.body), {'horarioId': 43, 'versao': 0});
+    expect(primeira.headers['Authorization'], 'Bearer token-de-teste');
+
+    // O fallback do TCC (Seção 3.8.3): a grade recarregada, sem as 14:30, e a
+    // explicação com a mensagem da API.
+    expect(api.pedidosA('GET', '/profissionais/2/horarios'), hasLength(2));
+    expect(find.text('Esse horário não está mais livre'), findsOneWidget);
+    expect(
+      find.text('Este horário acabou de ser reservado por outro paciente. A lista de horários já foi atualizada.'),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('14:30')), findsNothing);
+
+    // Uma das sugestões, direto para o resumo, e desta vez a reserva sai.
+    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('10:30')));
+    await tester.pumpAndSettle();
+    expect(find.text('Resumo da consulta'), findsOneWidget);
+    await tester.tap(find.text('Confirmar e ir para o pagamento'));
+    await tester.pumpAndSettle();
+
+    expect(jsonDecode(api.pedidosA('POST', '/consultas').last.body), {'horarioId': 42, 'versao': 0});
+    expect(find.text('Pagamento'), findsOneWidget);
+    expect(find.text('Etapa 3 de 3'), findsOneWidget);
+    expect(find.textContaining('Seu horário fica reservado até'), findsOneWidget);
+    expect(find.textContaining('(faltam 15\u00a0minutos)'), findsOneWidget);
+
+    // Voltar do pagamento leva à busca, e não ao resumo nem à grade.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(BuscaScreen), findsOneWidget);
+    expect(find.byType(ProfissionalScreen), findsNothing);
   });
 
   testWidgets('trocar de área fecha as telas abertas por cima', (tester) async {

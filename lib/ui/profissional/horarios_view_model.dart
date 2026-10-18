@@ -57,6 +57,9 @@ class HorariosViewModel extends ChangeNotifier {
 
   EstadoDaCarga get estado => _estado;
 
+  /// O relógio que esta grade lê — o resumo e o pagamento seguem com ele.
+  DateTime Function() get relogio => _agora;
+
   /// Hoje, no calendário da clínica.
   DataCivil get hoje => _hoje;
 
@@ -189,6 +192,28 @@ class HorariosViewModel extends ChangeNotifier {
     }
     _notificar();
   }
+
+  /// O horário que outra pessoa reservou antes — o conflito do lock otimista
+  /// (TCC, Seção 3.8.3). Sai da grade na hora: mesmo que a atualização que vem
+  /// a seguir falhe, ele não é oferecido de novo. Se era o escolhido, a escolha
+  /// sai sem o aviso de horário perdido, porque quem explica é a folha do
+  /// conflito.
+  void perderHorario(Horario perdido) {
+    for (final doDia in _porDia.values) {
+      doDia.removeWhere((horario) => horario.id == perdido.id);
+    }
+    if (_horarioEscolhido?.id == perdido.id) _horarioEscolhido = null;
+    _horarioPerdido = null;
+    _reconferir();
+    _notificar();
+  }
+
+  /// Os primeiros [quantos] horários livres a partir do dia [aPartirDe], na
+  /// ordem — as sugestões depois de um conflito.
+  List<Horario> proximosLivres({required DataCivil aPartirDe, int quantos = 4}) => [
+        for (final dia in dias)
+          if (dia.compareTo(aPartirDe) >= 0) ...horariosDe(dia),
+      ].take(quantos).toList();
 
   /// Pede a grade de [quantos] dias a partir de hoje. Devolve a grade, ou o
   /// erro que a tela mostra: nunca lança, para nenhum pedido deixar a tela

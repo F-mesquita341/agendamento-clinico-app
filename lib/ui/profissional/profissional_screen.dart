@@ -3,12 +3,18 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../data/services/abridor_de_links.dart';
 import '../../domain/models/clinica.dart';
 import '../../domain/models/data_civil.dart';
+import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/profissional.dart';
+import '../agendamento/etapa_do_agendamento.dart';
+import '../agendamento/resumo_screen.dart';
+import '../agendamento/resumo_view_model.dart';
 import '../comum/avatar.dart';
+import '../comum/botoes.dart';
 import '../comum/datas.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
@@ -16,12 +22,70 @@ import '../comum/retorno.dart';
 import '../comum/textos.dart';
 import 'horarios_view_model.dart';
 
+/// A tela de um profissional. O view model nasce na rota, e não na tela: o
+/// resumo da consulta volta para ela com o dia e o horário ainda escolhidos
+/// (checklist, item 3.1).
+Route<void> rotaDoProfissional(Profissional profissional, {DateTime Function() relogio = DateTime.now}) {
+  return MaterialPageRoute<void>(
+    builder: (_) => ChangeNotifierProvider(
+      create: (contexto) =>
+          HorariosViewModel(contexto.read<RepositorioDoCatalogo>(), profissional, agora: relogio)..carregar(),
+      child: const ProfissionalScreen(),
+    ),
+  );
+}
+
 /// Profissional e horários, numa tela só: quem atende e onde, com o contato da
 /// clínica (checklist, itens 2.9 e 10.3); quanto custa, antes de escolher o
 /// horário (5.10); os dias e os horários livres (1.6 e 5.2); e, fixo no
-/// rodapé, o que foi escolhido (6.1).
+/// rodapé, o que foi escolhido (6.1), com o "Continuar".
 class ProfissionalScreen extends StatelessWidget {
   const ProfissionalScreen({super.key});
+
+  /// Abre o resumo do horário escolhido. Sem horário, diz o que falta.
+  static Future<void> _continuar(BuildContext context, HorariosViewModel vm) async {
+    final horario = vm.horarioEscolhido;
+    if (horario == null) {
+      mostrarRetorno(context, TipoDeRetorno.aviso, 'Escolha um horário para continuar.');
+      return;
+    }
+    final desfecho = await Navigator.of(context).push(
+      rotaDoResumo(vm.profissional, horario, hoje: vm.hoje, relogio: vm.relogio),
+    );
+    if (desfecho is Conflito && context.mounted) await _explicarConflito(context, vm, horario, desfecho.erro);
+  }
+
+  /// O fallback do lock otimista (TCC, Seção 3.8.3; checklist, item 9.1): o
+  /// horário sai da grade, a grade é recarregada, e só então a folha explica,
+  /// com a mensagem da API e os horários livres mais próximos.
+  static Future<void> _explicarConflito(
+    BuildContext context,
+    HorariosViewModel vm,
+    Horario perdido,
+    ErroDaApi erro,
+  ) async {
+    vm.perderHorario(perdido);
+    await vm.atualizar();
+    if (!context.mounted) return;
+
+    final atualizou = vm.erroAoAtualizar == null;
+    final escolhido = await showModalBottomSheet<Horario>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _FolhaDoConflito(
+        mensagem: erro.mensagem,
+        falhaAoAtualizar: vm.erroAoAtualizar,
+        sugestoes: atualizou ? vm.proximosLivres(aPartirDe: perdido.dia) : const [],
+        hoje: vm.hoje,
+      ),
+    );
+    if (escolhido == null || !context.mounted) return;
+    vm.escolherDia(escolhido.dia);
+    vm.escolherHorario(escolhido);
+    // Como no modelo: escolher uma sugestão já leva ao resumo.
+    await _continuar(context, vm);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +93,7 @@ class ProfissionalScreen extends StatelessWidget {
     final dia = vm.diaEscolhido;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Escolher horário')),
+      appBar: AppBar(title: const Text('Escolher horário'), bottom: etapaDoAgendamento(context, 1)),
       body: SafeArea(
         child: Column(
           children: [
@@ -54,7 +118,8 @@ class ProfissionalScreen extends StatelessWidget {
                 ),
               ),
             ),
-            if (vm.estado == EstadoDaCarga.pronto && dia != null) _Resumo(vm: vm),
+            if (vm.estado == EstadoDaCarga.pronto && dia != null)
+              _Resumo(vm: vm, aoContinuar: () => _continuar(context, vm)),
           ],
         ),
       ),
@@ -120,7 +185,7 @@ class ProfissionalScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Semantics(header: true, child: Text('Horários livres', style: tema.textTheme.titleMedium)),
-              Text(_diaPorInteiro(dia, hoje: vm.hoje), style: apoio),
+              Text(diaPorInteiro(dia, hoje: vm.hoje), style: apoio),
             ],
           ),
         ),
@@ -139,13 +204,6 @@ class ProfissionalScreen extends StatelessWidget {
       ],
     ];
   }
-}
-
-/// "Amanhã, quinta-feira, 15/10" — o dia com tudo o que o identifica.
-String _diaPorInteiro(DataCivil dia, {required DataCivil hoje}) {
-  final relativo = diaRelativo(dia, hoje: hoje);
-  final porExtenso = diaPorExtenso(dia, hoje: hoje);
-  return relativo == null ? comInicialMaiuscula(porExtenso) : '$relativo, $porExtenso';
 }
 
 /// Quem atende: iniciais, nome, especialidade e o registro no conselho, como a
@@ -437,7 +495,7 @@ class _Dia extends StatelessWidget {
       button: true,
       enabled: temHorario,
       selected: escolhido,
-      label: '${_diaPorInteiro(dia, hoje: hoje)}, $quantos',
+      label: '${diaPorInteiro(dia, hoje: hoje)}, $quantos',
       onTap: temHorario ? aoEscolher : null,
       child: Material(
         color: escolhido
@@ -615,11 +673,12 @@ class _BotaoDeHorario extends StatelessWidget {
 }
 
 /// O resumo fixo no rodapé: o que foi escolhido, sempre à vista, sem precisar
-/// rolar a tela de volta (checklist, itens 6.1 e 10.8).
+/// rolar a tela de volta (checklist, itens 6.1 e 10.8), e o "Continuar".
 class _Resumo extends StatelessWidget {
-  const _Resumo({required this.vm});
+  const _Resumo({required this.vm, required this.aoContinuar});
 
   final HorariosViewModel vm;
+  final VoidCallback aoContinuar;
 
   @override
   Widget build(BuildContext context) {
@@ -634,6 +693,27 @@ class _Resumo extends StatelessWidget {
             '${vm.profissional.nome} · ${semQuebra(vm.profissional.valorFormatado)}',
           );
 
+    // Com a fonte grande, o texto e o botão ficam um embaixo do outro, e o
+    // texto não fica espremido numa coluna estreita. Para a grade não sumir
+    // atrás do rodapé numa tela pequena, fica só a escolha: quem atende e o
+    // valor estão no topo da tela, e voltam no resumo.
+    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+
+    // liveRegion: o leitor de tela anuncia a escolha quando ela muda. O botão
+    // fica fora, para não ser anunciado a cada troca.
+    final escolha = Semantics(
+      container: true,
+      liveRegion: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titulo, style: tema.textTheme.titleSmall!.copyWith(fontSize: 17, fontWeight: FontWeight.w800)),
+          if (!fonteGrande) Text(apoio, style: tema.textTheme.bodySmall!.copyWith(fontSize: 15, color: cores.onSurfaceVariant)),
+        ],
+      ),
+    );
+
+    // Sempre tocável, como no modelo: sem horário, o toque diz o que falta.
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -641,17 +721,134 @@ class _Resumo extends StatelessWidget {
         border: Border(top: BorderSide(color: cores.outlineVariant)),
       ),
       padding: const EdgeInsets.all(Espaco.medio),
-      // liveRegion: o leitor de tela anuncia a escolha quando ela muda.
-      child: Semantics(
-        container: true,
-        liveRegion: true,
+      child: fonteGrande
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: Espaco.medio,
+              children: [escolha, BotaoPrincipal(rotulo: 'Continuar', aoTocar: aoContinuar)],
+            )
+          : Row(
+              spacing: Espaco.medio,
+              children: [
+                Expanded(child: escolha),
+                FilledButton(onPressed: aoContinuar, child: const Text('Continuar')),
+              ],
+            ),
+    );
+  }
+}
+
+/// "Esse horário não está mais livre": a mensagem da API, se a grade já foi
+/// atualizada, e os horários livres mais próximos — tocar num deles leva
+/// direto ao resumo, como no modelo. Devolve o horário sugerido escolhido.
+class _FolhaDoConflito extends StatelessWidget {
+  const _FolhaDoConflito({
+    required this.mensagem,
+    required this.falhaAoAtualizar,
+    required this.sugestoes,
+    required this.hoje,
+  });
+
+  final String mensagem;
+  final ErroDaApi? falhaAoAtualizar;
+  final List<Horario> sugestoes;
+  final DataCivil hoje;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final texto = tema.textTheme.bodyLarge;
+    final porLinha = MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 1 : 2;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(Espaco.grande, 0, Espaco.grande, Espaco.grande),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: Espaco.medio,
           children: [
-            Text(titulo, style: tema.textTheme.titleSmall!.copyWith(fontSize: 17, fontWeight: FontWeight.w800)),
-            Text(apoio, style: tema.textTheme.bodySmall!.copyWith(fontSize: 15, color: cores.onSurfaceVariant)),
+            Icon(Icons.event_busy_outlined, size: 32, color: tema.colorScheme.primary),
+            Semantics(
+              header: true,
+              child: Text(
+                'Esse horário não está mais livre',
+                style: tema.textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            if (falhaAoAtualizar case final falha?) ...[
+              Text(mensagem, style: texto),
+              Aviso(
+                tipo: TipoDeRetorno.erro,
+                texto: 'Não foi possível atualizar a lista de horários. ${falha.mensagem}',
+              ),
+            ] else
+              Text('$mensagem A lista de horários já foi atualizada.', style: texto),
+            if (sugestoes.isNotEmpty) ...[
+              Text('Horários livres mais próximos', style: tema.textTheme.titleSmall),
+              LayoutBuilder(
+                builder: (contexto, limites) {
+                  final largura = (limites.maxWidth - Espaco.pequeno * (porLinha - 1)) / porLinha;
+                  return Wrap(
+                    spacing: Espaco.pequeno,
+                    runSpacing: Espaco.pequeno,
+                    children: [
+                      for (final horario in sugestoes)
+                        SizedBox(
+                          width: largura,
+                          child: _Sugestao(
+                            horario: horario,
+                            hoje: hoje,
+                            aoTocar: () => Navigator.of(context).pop(horario),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+            BotaoPrincipal(rotulo: 'Ver todos os horários', aoTocar: () => Navigator.of(context).pop()),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Um horário sugerido depois do conflito: a hora, que é o que distingue um do
+/// outro, e embaixo o dia. Em duas linhas de propósito — numa só, em meia
+/// largura, a hora quebraria sozinha para a linha de baixo.
+class _Sugestao extends StatelessWidget {
+  const _Sugestao({required this.horario, required this.hoje, required this.aoTocar});
+
+  final Horario horario;
+  final DataCivil hoje;
+  final VoidCallback aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(horizontal: Espaco.pequeno, vertical: Espaco.pequeno),
+      ),
+      onPressed: aoTocar,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            horario.hora,
+            style: tema.textTheme.labelLarge!.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            comInicialMaiuscula(diaCurto(horario.dia, hoje: hoje)),
+            textAlign: TextAlign.center,
+            style: tema.textTheme.bodySmall!.copyWith(fontSize: 14, color: tema.colorScheme.onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
