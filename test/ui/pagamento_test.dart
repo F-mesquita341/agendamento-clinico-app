@@ -36,7 +36,7 @@ void main() {
   setUp(() => agora = meioDiaDeQuarta);
 
   group('reserva, no view model', () {
-    test('até quando, na hora da clínica, e quanto falta, arredondado para cima', () {
+    test('até quando, na hora da clínica, e quanto falta, no minuto mais próximo', () {
       final vm = reservaVm(reserva());
       addTearDown(vm.dispose);
 
@@ -46,8 +46,23 @@ void main() {
 
       agora = meioDiaDeQuarta.add(const Duration(minutes: 1, seconds: 1));
       expect(vm.quantoFalta, 'faltam 14\u00a0minutos');
+      agora = meioDiaDeQuarta.add(const Duration(minutes: 1, seconds: 31));
+      expect(vm.quantoFalta, 'faltam 13\u00a0minutos');
       agora = meioDiaDeQuarta.add(const Duration(minutes: 13, seconds: 59));
-      expect(vm.quantoFalta, 'faltam 2\u00a0minutos');
+      expect(vm.quantoFalta, 'falta 1\u00a0minuto');
+    });
+
+    // O portão pegou: com o relógio do aparelho uns segundos atrás do
+    // servidor, logo depois de reservar faltavam "16 minutos" de 15.
+    test('o relógio do aparelho uns segundos atrás do servidor não vira 16 minutos', () {
+      final vm = reservaVm(reserva());
+      addTearDown(vm.dispose);
+
+      agora = meioDiaDeQuarta.subtract(const Duration(seconds: 3));
+      expect(vm.quantoFalta, 'faltam 15\u00a0minutos');
+      // E, no sentido contrário, 14 minutos e meio arredondam para baixo.
+      agora = meioDiaDeQuarta.add(const Duration(seconds: 31));
+      expect(vm.quantoFalta, 'faltam 14\u00a0minutos');
     });
 
     test('no último minuto, "falta menos de 1 minuto"; no prazo, vencida', () {
@@ -140,7 +155,14 @@ void main() {
       await passar(tester, const Duration(minutes: 1));
       expect(find.text('Seu horário fica reservado até 12:15 (faltam 14\u00a0minutos).'), findsOneWidget);
 
-      await passar(tester, const Duration(minutes: 13));
+      // O texto troca no meio minuto: com 13 minutos e meio, são 13.
+      await passar(tester, const Duration(seconds: 30));
+      expect(find.text('Seu horário fica reservado até 12:15 (faltam 13\u00a0minutos).'), findsOneWidget);
+
+      await passar(tester, const Duration(minutes: 12));
+      expect(find.text('Seu horário fica reservado até 12:15 (falta 1\u00a0minuto).'), findsOneWidget);
+
+      await passar(tester, const Duration(seconds: 30));
       expect(find.text('Seu horário fica reservado até 12:15 (falta menos de 1\u00a0minuto).'), findsOneWidget);
     });
 

@@ -51,22 +51,43 @@ class ReservaViewModel extends ChangeNotifier {
         null => false,
       };
 
-  /// "faltam 14 minutos", arredondado para cima: logo depois de reservar, são
-  /// os 15 minutos prometidos no resumo. No último minuto, "falta menos de 1
-  /// minuto". Null sem prazo, ou com ele vencido.
+  /// "faltam 14 minutos": logo depois de reservar, são os 15 minutos
+  /// prometidos no resumo. No último minuto, "falta menos de 1 minuto". Null
+  /// sem prazo, ou com ele vencido.
   String? get quantoFalta {
-    final minutos = _minutosQueFaltam();
-    if (minutos == null) return null;
     // O número não fica numa linha e "minutos" na outra.
-    return minutos == 1 ? 'falta menos de 1\u00a0minuto' : 'faltam $minutos\u00a0minutos';
+    return switch (_minutosQueFaltam()) {
+      null => null,
+      0 => 'falta menos de 1\u00a0minuto',
+      1 => 'falta 1\u00a0minuto',
+      final minutos => 'faltam $minutos\u00a0minutos',
+    };
   }
 
-  /// Os minutos que faltam, arredondados para cima; null sem prazo ou vencido.
+  /// Os minutos que faltam, arredondados para o mais próximo — e não para cima:
+  /// o relógio do aparelho pode estar uns segundos atrás do servidor, e logo
+  /// depois de reservar mostraria "faltam 16 minutos" de uma reserva de 15
+  /// (portão da Etapa 14). Assim, diferenças de até meio minuto não aparecem.
+  /// No último minuto, zero; null sem prazo, ou com ele vencido.
   int? _minutosQueFaltam() {
     final resta = _resta();
     if (resta == null) return null;
-    return (resta.inMicroseconds / Duration.microsecondsPerMinute).ceil();
+    if (resta <= const Duration(minutes: 1)) return 0;
+    // Com meio minuto a menos, arredondar para cima é arredondar para o mais
+    // próximo — e o meio exato fica com o menor, para a troca nunca cair no
+    // instante em que o relógio é marcado.
+    return ((resta - _meioMinuto).inMicroseconds / Duration.microsecondsPerMinute).ceil();
   }
+
+  static const _meioMinuto = Duration(seconds: 30);
+
+  /// Quanto falta quando o texto troca de novo: no meio minuto de baixo; de
+  /// "falta 1 minuto" para "menos de 1", com um minuto; e, no último, no prazo.
+  static Duration _proximaTroca(int minutos) => switch (minutos) {
+        0 => Duration.zero,
+        1 => const Duration(minutes: 1),
+        _ => Duration(minutes: minutos - 1) + _meioMinuto,
+      };
 
   Duration? _resta() {
     final prazo = this.prazo;
@@ -83,7 +104,7 @@ class ReservaViewModel extends ChangeNotifier {
     final resta = _resta();
     final minutos = _minutosQueFaltam();
     if (resta == null || minutos == null) return;
-    _relogio = Timer(resta - Duration(minutes: minutos - 1), () {
+    _relogio = Timer(resta - _proximaTroca(minutos), () {
       _marcarRelogio();
       _notificar();
     });
