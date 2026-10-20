@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
+import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
@@ -281,6 +282,7 @@ void main() {
         providers: [
           Provider<RepositorioDeConsultas>.value(value: consultas),
           Provider<RepositorioDoCatalogo>.value(value: CatalogoFalso()),
+          Provider<AbridorDeLinks>.value(value: AbridorDeLinksFalso()),
         ],
         child: MaterialApp(
           theme: temaDoApp(),
@@ -402,10 +404,27 @@ void main() {
       expect(find.text('Pagamento'), findsOneWidget);
       expect(find.text('Etapa 3 de 3'), findsOneWidget);
 
+      // Sair sem pagar pergunta antes (Etapa 15).
       await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sair'));
       await tester.pumpAndSettle();
       expect(find.text('Resumo da consulta'), findsNothing);
       expect(find.text('Abrir o resumo'), findsOneWidget);
+    });
+
+    testWidgets('toque, rótulos e contraste, com e sem a recusa', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await abrir(tester, ConsultasFalso(agendar: [sobreposta]));
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+
+      await tester.tap(confirmar());
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      semantica.dispose();
     });
 
     testWidgets('a 200%, numa tela pequena, nada estoura: o botão vai para o fim da lista, com o aviso', (

@@ -12,14 +12,25 @@ const minutosDeReserva = 15;
 /// A frase que explica o pagamento antecipado, onde ele aparece, e o caminho
 /// para a explicação inteira (checklist, itens 2.3 e 10.1). Nunca "caução".
 class PagamentoAntecipado extends StatelessWidget {
-  const PagamentoAntecipado({super.key});
+  const PagamentoAntecipado({super.key, this.complemento});
+
+  /// O que a frase diz a mais, onde precisa — na tela do pagamento, que a
+  /// página do Mercado Pago abre a seguir.
+  final String? complemento;
 
   @override
   Widget build(BuildContext context) {
+    const frase = 'O pagamento antecipado garante o seu horário.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('O pagamento antecipado garante o seu horário.', style: Theme.of(context).textTheme.bodyLarge),
+        Text(
+          switch (complemento) {
+            final mais? => '$frase $mais',
+            null => frase,
+          },
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
         // Um link que continua a frase de cima: começa onde ela começa, e, se
         // quebrar de linha com a fonte grande, fica alinhado à esquerda como
         // ela — e não centrado, como os outros botões de texto.

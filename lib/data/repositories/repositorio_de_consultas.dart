@@ -1,3 +1,4 @@
+import '../../domain/models/checkout.dart';
 import '../../domain/models/consulta.dart';
 import '../../domain/models/pagina.dart';
 import '../services/api_client.dart';
@@ -16,6 +17,15 @@ abstract interface class RepositorioDeConsultas {
   /// As consultas do paciente, uma página por vez, da que acontece mais
   /// adiante para a mais antiga.
   Future<Pagina<Consulta>> minhas({int pagina = 1});
+
+  /// A consulta como a API a tem agora, com o horário e o profissional. É por
+  /// aqui que o aplicativo sabe se o pagamento foi confirmado: a volta do
+  /// checkout não confirma nada (checklist, item 1.5).
+  Future<Consulta> consulta(int id);
+
+  /// Abre — ou reaproveita — a página de pagamento da consulta. Pedir de novo
+  /// devolve a mesma página enquanto ela estiver aberta.
+  Future<Checkout> pagar(int consultaId);
 }
 
 /// As consultas vão sempre com o token da conta: são de quem está dentro.
@@ -37,5 +47,17 @@ class RepositorioDeConsultasRemoto implements RepositorioDeConsultas {
   Future<Pagina<Consulta>> minhas({int pagina = 1}) async {
     final corpo = await _api.get('/consultas', consulta: {'pagina': '$pagina', 'limite': '$porPagina'});
     return lerPagina(corpo, 'consultas', Consulta.fromJson);
+  }
+
+  @override
+  Future<Consulta> consulta(int id) async {
+    final corpo = await _api.get('/consultas/$id');
+    return lerObjeto(corpo, 'consulta', Consulta.fromJson);
+  }
+
+  @override
+  Future<Checkout> pagar(int consultaId) async {
+    final corpo = await _api.post('/consultas/$consultaId/pagamento');
+    return lerObjeto(corpo, 'pagamento', Checkout.fromJson);
   }
 }
