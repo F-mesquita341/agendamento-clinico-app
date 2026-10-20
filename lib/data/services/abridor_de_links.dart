@@ -9,6 +9,12 @@ abstract interface class AbridorDeLinks {
   /// Abre o aplicativo de mapas procurando o lugar. Devolve false se o
   /// aparelho não tem com o que abrir.
   Future<bool> abrirNoMapa(String lugar);
+
+  /// Abre a página de pagamento numa aba do navegador por cima do aplicativo
+  /// (uma Custom Tab, no Android): a pessoa paga lá e, ao fechar a aba, está
+  /// de volta. A aba usa a sessão do navegador — é onde fica a conta
+  /// compradora de teste. Devolve false se o aparelho não consegue abrir.
+  Future<bool> abrirPagamento(Uri endereco);
 }
 
 /// O endereço que abre o discador: só os dígitos do telefone, e o "+" do

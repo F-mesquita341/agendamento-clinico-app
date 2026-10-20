@@ -108,7 +108,19 @@ void main() {
       expect(consulta.horario, isNull);
     });
 
+    test('o motivo do cancelamento: os dois da API, um novo vira outro, e nenhum fica nulo', () {
+      MotivoDoCancelamento? lido(Object? motivo) =>
+          Consulta.fromJson({...json, 'status': 'cancelada', 'motivoCancelamento': motivo}).motivoDoCancelamento;
+
+      expect(lido('paciente'), MotivoDoCancelamento.paciente);
+      expect(lido('reserva_expirada'), MotivoDoCancelamento.reservaExpirada);
+      expect(lido('clinica'), MotivoDoCancelamento.outro);
+      expect(lido(null), isNull);
+    });
+
     test('fora do formato é recusada', () {
+      expect(() => Consulta.fromJson({...json, 'motivoCancelamento': 1}), throwsFormatException);
+      expect(() => Consulta.fromJson({...json, 'profissional': 'Carlos'}), throwsFormatException);
       expect(() => Consulta.fromJson({...json, 'id': '31'}), throwsFormatException);
       expect(() => Consulta.fromJson({...json, 'status': null}), throwsFormatException);
       expect(() => Consulta.fromJson({...json, 'horario': 7}), throwsFormatException);

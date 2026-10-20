@@ -36,6 +36,13 @@ class ApiFalsa {
 
   bool temPerfil;
   String versaoDoTermo;
+
+  /// O status da consulta 90 no detalhe: o teste o muda quando o "Mercado
+  /// Pago" confirma o pagamento.
+  String statusDaConsulta = 'pendente_pagamento';
+
+  /// O horário reservado por último, para o detalhe da consulta.
+  int horarioReservado = 0;
   final pedidos = <http.Request>[];
 
   /// Respostas forçadas, por "MÉTODO /caminho", consumidas uma vez.
@@ -52,6 +59,21 @@ class ApiFalsa {
           'consentimento': {'versao': '2026-09-v2', 'aceitoEm': '2026-10-07T01:30:00.000Z'},
         },
       };
+
+  static const cardiologista = {
+    'id': 2,
+    'nome': 'Carlos Eduardo Timbó',
+    'registroConselho': 'CRM-CE 12345',
+    'especialidade': {'id': 1, 'nome': 'Cardiologia'},
+    'valorCentavos': 25000,
+    'valorFormatado': 'R\$ 250,00',
+    'clinica': {
+      'id': 1,
+      'nome': 'Clínica Exemplo Quixadá',
+      'telefone': '(88) 3000-0000',
+      'endereco': 'Centro, Quixadá - CE',
+    },
+  };
 
   static http.Response json(int status, Object corpo) =>
       http.Response.bytes(utf8.encode(jsonEncode(corpo)), status, headers: {'content-type': 'application/json'});
@@ -71,22 +93,7 @@ class ApiFalsa {
           ],
         }),
       'GET /profissionais' => json(200, {
-          'profissionais': [
-            {
-              'id': 2,
-              'nome': 'Carlos Eduardo Timbó',
-              'registroConselho': 'CRM-CE 12345',
-              'especialidade': {'id': 1, 'nome': 'Cardiologia'},
-              'valorCentavos': 25000,
-              'valorFormatado': 'R\$ 250,00',
-              'clinica': {
-                'id': 1,
-                'nome': 'Clínica Exemplo Quixadá',
-                'telefone': '(88) 3000-0000',
-                'endereco': 'Centro, Quixadá - CE',
-              },
-            },
-          ],
+          'profissionais': [cardiologista],
           'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
         }),
       'GET /profissionais/2/horarios' => json(200, grade()),
@@ -107,11 +114,38 @@ class ApiFalsa {
             'id': 90,
             'status': 'pendente_pagamento',
             'motivoCancelamento': null,
-            'horarioId': (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId'],
+            'horarioId': horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int,
             'valorCentavos': 25000,
             'valorFormatado': 'R\$ 250,00',
             'reservaExpiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
             'criadoEm': DateTime.now().toUtc().toIso8601String(),
+          },
+        }),
+      // A página de pagamento, em ambiente de teste.
+      'POST /consultas/90/pagamento' => json(201, {
+          'pagamento': {
+            'status': 'aberto',
+            'checkoutUrl': 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=teste',
+            'expiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
+            'valorCentavos': 25000,
+            'valorFormatado': 'R\$ 250,00',
+          },
+        }),
+      // A consulta como a API a tem: o status é o que o teste disser.
+      'GET /consultas/90' => json(200, {
+          'consulta': {
+            'id': 90,
+            'status': statusDaConsulta,
+            'motivoCancelamento': null,
+            'horarioId': horarioReservado,
+            'valorCentavos': 25000,
+            'valorFormatado': 'R\$ 250,00',
+            'reservaExpiraEm': null,
+            'criadoEm': DateTime.now().toUtc().toIso8601String(),
+            'horario': (grade()['horarios']! as List<Object?>)
+                .cast<Map<String, Object?>>()
+                .firstWhere((h) => h['id'] == horarioReservado),
+            'profissional': cardiologista,
           },
         }),
       'GET /consultas' => json(200, {
@@ -475,11 +509,71 @@ void main() {
     expect(find.textContaining('Seu horário fica reservado até'), findsOneWidget);
     expect(find.textContaining('(faltam 15\u00a0minutos)'), findsOneWidget);
 
-    // Voltar do pagamento leva à busca, e não ao resumo nem à grade.
+    // Voltar do pagamento pergunta antes; saindo, leva à busca, e não ao
+    // resumo nem à grade.
     await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Sair sem pagar?'), findsOneWidget);
+    await tester.tap(find.text('Sair'));
     await tester.pumpAndSettle();
     expect(find.byType(BuscaScreen), findsOneWidget);
     expect(find.byType(ProfissionalScreen), findsNothing);
+  });
+
+  testWidgets('o portão em miniatura da Etapa 15: pagar na aba, voltar, e a consulta confirmada pela API', (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    final abridor = AbridorDeLinksFalso();
+    await montar(tester, autenticacao, api, abridor: abridor);
+    await sessao(tester, autenticacao, ana);
+
+    // O cardiologista, as 14:30 de amanhã, o resumo e a reserva.
+    await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('14:30'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmar e ir para o pagamento'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pagamento'), findsOneWidget);
+    expect(find.text('Ambiente de teste: nenhum valor real é cobrado.').hitTestable(), findsOneWidget);
+
+    // A página do Mercado Pago, pedida com o token, aberta na aba.
+    await tester.tap(find.text('Abrir o pagamento'));
+    await tester.pump();
+    await tester.pump();
+    final pedido = api.pedidosA('POST', '/consultas/90/pagamento').single;
+    expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
+    expect(abridor.pagamentos, [Uri.parse('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=teste')]);
+
+    // Lá, a pessoa paga; o webhook chega à API, que passa a dizer confirmada.
+    api.statusDaConsulta = 'confirmada';
+    for (final estado in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(estado);
+    }
+    await tester.pumpAndSettle();
+
+    // A confirmação vem do detalhe que a API devolveu, com o endereço.
+    expect(api.pedidosA('GET', '/consultas/90'), isNotEmpty);
+    expect(find.text('Consulta confirmada'), findsOneWidget);
+    expect(find.text('Centro, Quixadá - CE'), findsOneWidget);
+
+    // Voltar dali leva à busca, e não ao pagamento.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(BuscaScreen), findsOneWidget);
+    expect(find.text('Pagamento'), findsNothing);
   });
 
   testWidgets('trocar de área fecha as telas abertas por cima', (tester) async {

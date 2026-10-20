@@ -7,6 +7,7 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_consentimen
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
+import 'package:agendamento_clinico/domain/models/checkout.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
@@ -180,14 +181,24 @@ class CatalogoFalso implements RepositorioDoCatalogo {
 /// As consultas em memória, com uma fila de respostas para cada pedido e o
 /// registro do que foi pedido.
 class ConsultasFalso implements RepositorioDeConsultas {
-  ConsultasFalso({Iterable<Object?> agendar = const [], Iterable<Object?> minhas = const []})
-      : respostasDeAgendar = Fila(agendar),
-        respostasDeMinhas = Fila(minhas);
+  ConsultasFalso({
+    Iterable<Object?> agendar = const [],
+    Iterable<Object?> minhas = const [],
+    Iterable<Object?> consulta = const [],
+    Iterable<Object?> pagar = const [],
+  })  : respostasDeAgendar = Fila(agendar),
+        respostasDeMinhas = Fila(minhas),
+        respostasDeConsulta = Fila(consulta),
+        respostasDePagar = Fila(pagar);
 
   final Fila respostasDeAgendar;
   final Fila respostasDeMinhas;
+  final Fila respostasDeConsulta;
+  final Fila respostasDePagar;
   final pedidosDeAgendar = <({int horarioId, int versao})>[];
   final pedidosDeMinhas = <int>[];
+  final pedidosDeConsulta = <int>[];
+  final pedidosDePagar = <int>[];
 
   @override
   Future<Consulta> agendar({required int horarioId, required int versao}) {
@@ -200,6 +211,18 @@ class ConsultasFalso implements RepositorioDeConsultas {
     pedidosDeMinhas.add(pagina);
     return respostasDeMinhas.proxima<Pagina<Consulta>>();
   }
+
+  @override
+  Future<Consulta> consulta(int id) {
+    pedidosDeConsulta.add(id);
+    return respostasDeConsulta.proxima<Consulta>();
+  }
+
+  @override
+  Future<Checkout> pagar(int consultaId) {
+    pedidosDePagar.add(consultaId);
+    return respostasDePagar.proxima<Checkout>();
+  }
 }
 
 /// O discador e o mapa em memória: registra o que seria aberto, e responde
@@ -207,9 +230,11 @@ class ConsultasFalso implements RepositorioDeConsultas {
 class AbridorDeLinksFalso implements AbridorDeLinks {
   AbridorDeLinksFalso({this.consegue = true});
 
-  final bool consegue;
+  /// Se o aparelho "consegue" abrir — o teste pode mudar no meio.
+  bool consegue;
   final ligacoes = <String>[];
   final mapas = <String>[];
+  final pagamentos = <Uri>[];
 
   @override
   Future<bool> ligar(String telefone) async {
@@ -220,6 +245,12 @@ class AbridorDeLinksFalso implements AbridorDeLinks {
   @override
   Future<bool> abrirNoMapa(String lugar) async {
     mapas.add(lugar);
+    return consegue;
+  }
+
+  @override
+  Future<bool> abrirPagamento(Uri endereco) async {
+    pagamentos.add(endereco);
     return consegue;
   }
 }
