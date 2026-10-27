@@ -13,6 +13,7 @@ import 'package:agendamento_clinico/ui/agendamento/pagamento_screen.dart';
 import 'package:agendamento_clinico/ui/agendamento/reserva_view_model.dart';
 import 'package:agendamento_clinico/ui/comum/selo_de_status.dart';
 import 'package:agendamento_clinico/ui/comum/textos.dart';
+import 'package:agendamento_clinico/ui/shell/abas_do_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -54,7 +55,6 @@ final expirada = noDetalhe(StatusDaConsulta.cancelada, motivo: MotivoDoCancelame
 
 final checkout = Checkout(
   endereco: Uri.parse('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123'),
-  valorFormatado: 'R\$ 200,00',
 );
 
 ReservaViewModel reservaVm(Consulta consulta) => ReservaViewModel(
@@ -168,8 +168,10 @@ void main() {
     late CatalogoFalso catalogo;
     late ConsultasFalso consultas;
     late AbridorDeLinksFalso abridor;
+    late AbasDoShell abas;
 
-    /// Uma tela por baixo, que abre o pagamento como o resumo abriria.
+    /// Uma tela por baixo, que abre o pagamento como o resumo abriria — ou,
+    /// com [reaberta], como "Pagar agora" reabre.
     Future<void> abrir(
       WidgetTester tester,
       Consulta consulta, {
@@ -178,19 +180,25 @@ void main() {
       List<Object?> lidas = const [],
       bool abre = true,
       double altura = 1400,
+      bool reaberta = false,
+      List<Object?> cancelar = const [],
     }) async {
       // Alta, para a tela inteira caber sem rolar; o teste a 200% rola.
       tester.view.physicalSize = Size(411, altura);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       catalogo = CatalogoFalso(horarios: horarios);
-      consultas = ConsultasFalso(pagar: pagar, consulta: lidas);
+      consultas = ConsultasFalso(pagar: pagar, consulta: lidas, cancelar: cancelar);
+      // A aba de quem agenda: a busca. O pagamento escolhe para onde se volta.
+      abas = AbasDoShell()..mostrar(AbaDoShell.buscar);
+      addTearDown(abas.dispose);
       abridor = AbridorDeLinksFalso(consegue: abre);
       await tester.pumpWidget(MultiProvider(
         providers: [
           Provider<RepositorioDoCatalogo>.value(value: catalogo),
           Provider<RepositorioDeConsultas>.value(value: consultas),
           Provider<AbridorDeLinks>.value(value: abridor),
+          ChangeNotifierProvider<AbasDoShell>.value(value: abas),
         ],
         child: MaterialApp(
           theme: temaDoApp(),
@@ -199,7 +207,13 @@ void main() {
               body: Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(contexto).push(
-                    rotaDoPagamento(consulta, profissional: timbo, horario: escolhido, relogio: () => agora),
+                    rotaDoPagamento(
+                      consulta,
+                      profissional: timbo,
+                      horario: escolhido,
+                      relogio: () => agora,
+                      reaberta: reaberta,
+                    ),
                   ),
                   child: const Text('Ir ao pagamento'),
                 ),
@@ -706,7 +720,11 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Sair sem pagar?'), findsOneWidget);
-      expect(find.text('O horário fica reservado até 12:15 e depois volta a ficar livre.'), findsOneWidget);
+      expect(
+        find.text('O horário fica reservado até 12:15 e depois volta a ficar livre. '
+            'Para pagar depois, abra a consulta em Minhas consultas.'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Continuar pagamento'));
       await tester.pumpAndSettle();
@@ -731,7 +749,7 @@ void main() {
       expect(find.text('Sair do pagamento?'), findsOneWidget);
       expect(
         find.text('Se você já pagou, a confirmação chega mesmo assim. Se não pagou, o horário fica reservado '
-            'até 12:15 e depois volta a ficar livre.'),
+            'até 12:15 e depois volta a ficar livre. Para pagar depois, abra a consulta em Minhas consultas.'),
         findsOneWidget,
       );
       expect(find.text('Sair sem pagar?'), findsNothing);
@@ -754,9 +772,13 @@ void main() {
       expect(find.text('Pagamento'), findsNothing);
       expect(find.text('Ir ao pagamento'), findsOneWidget);
       expect(abridor.pagamentos, hasLength(1));
+      // E o shell, por baixo, mostra o Início (checklist, item 3.3).
+      expect(abas.aba, AbaDoShell.inicio);
     });
 
-    testWidgets('na confirmação, a data e a hora em destaque, e "Abrir no mapa" e "Voltar à busca"', (tester) async {
+    testWidgets('na confirmação, a data e a hora em destaque, "Abrir no mapa", e "Ver minhas consultas" leva à aba delas', (
+      tester,
+    ) async {
       await abrir(tester, reserva(), pagar: [checkout], lidas: [paga]);
       await tocarEmAbrir(tester);
       await voltarAoApp(tester);
@@ -769,9 +791,23 @@ void main() {
       await tester.pump();
       expect(abridor.mapas, ['Clínica Exemplo Quixadá, Centro, Quixadá - CE']);
 
-      await tester.tap(find.text('Voltar à busca'));
+      expect(find.text('Voltar à busca'), findsNothing);
+      await tester.tap(find.text('Ver minhas consultas'));
       await tester.pumpAndSettle();
       expect(find.text('Ir ao pagamento'), findsOneWidget);
+      expect(abas.aba, AbaDoShell.consultas);
+    });
+
+    testWidgets('na confirmação, "Voltar ao início" leva ao Início', (tester) async {
+      await abrir(tester, reserva(), pagar: [checkout], lidas: [paga]);
+      await tocarEmAbrir(tester);
+      await voltarAoApp(tester);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Voltar ao início'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ir ao pagamento'), findsOneWidget);
+      expect(abas.aba, AbaDoShell.inicio);
     });
 
     testWidgets('a confirmação mostra o que a API devolveu, e não o que a tela do pagamento tinha', (tester) async {
@@ -919,6 +955,150 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
       semantica.dispose();
+    });
+
+    testWidgets('reaberta por "Pagar agora": sem "Etapa 3 de 3"', (tester) async {
+      await abrir(tester, reserva(), reaberta: true);
+
+      expect(find.text('Pagamento'), findsOneWidget);
+      expect(find.text('Etapa 3 de 3'), findsNothing);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sair'));
+      await tester.pumpAndSettle();
+    });
+
+    Finder noDialogo(String texto) => find.descendant(of: find.byType(AlertDialog), matching: find.text(texto));
+
+    testWidgets('"Cancelar reserva" pergunta, cancela e leva a Minhas consultas, com "Consulta cancelada."', (
+      tester,
+    ) async {
+      await abrir(tester, reserva(), cancelar: [noDetalhe(StatusDaConsulta.cancelada, motivo: MotivoDoCancelamento.paciente)]);
+
+      await tester.tap(find.text('Cancelar reserva'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cancelar esta consulta?'), findsOneWidget);
+      expect(find.textContaining('Esta consulta ainda aguarda a confirmação do pagamento.'), findsOneWidget);
+      await tester.tap(noDialogo('Cancelar consulta'));
+      await tester.pumpAndSettle();
+
+      expect(consultas.pedidosDeCancelar, [50]);
+      expect(find.text('Pagamento'), findsNothing);
+      expect(find.text('Ir ao pagamento'), findsOneWidget);
+      expect(find.text('Consulta cancelada.'), findsOneWidget);
+      expect(abas.aba, AbaDoShell.consultas);
+      expect(find.text(tituloDaFolha), findsNothing);
+    });
+
+    testWidgets('"Cancelar reserva" some enquanto a tela pede a página', (tester) async {
+      final resposta = Completer<Checkout>();
+      await abrir(tester, reserva(), pagar: [resposta]);
+      expect(find.text('Cancelar reserva'), findsOneWidget);
+
+      await tester.tap(find.text(abrirPagamento));
+      await tester.pump();
+      expect(find.text('Cancelar reserva'), findsNothing);
+
+      resposta.complete(checkout);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Cancelar reserva'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sair'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a reserva que a API já tinha expirado: a folha da reserva vencida, e não o sucesso', (tester) async {
+      await abrir(tester, reserva(), cancelar: [expirada]);
+
+      await tester.tap(find.text('Cancelar reserva'));
+      await tester.pumpAndSettle();
+      await tester.tap(noDialogo('Cancelar consulta'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(tituloDaFolha), findsOneWidget);
+      expect(find.text('Consulta cancelada.'), findsNothing);
+    });
+
+    testWidgets('a recusa do cancelamento: a mensagem, e a reserva continua na tela', (tester) async {
+      const recusa = ErroDaApi(status: 422, codigo: 'OUTRA_RECUSA', mensagem: 'Não dá para cancelar agora.');
+      await abrir(tester, reserva(), cancelar: [recusa], lidas: [aguardando]);
+
+      await tester.tap(find.text('Cancelar reserva'));
+      await tester.pumpAndSettle();
+      await tester.tap(noDialogo('Cancelar consulta'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Não dá para cancelar agora.'), findsOneWidget);
+      expect(find.text('Cancelar reserva'), findsOneWidget);
+      expect(abas.aba, AbaDoShell.buscar);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sair'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a conferência continuada para durante o cancelamento, e volta se ele for recusado', (tester) async {
+      final resposta = Completer<Consulta>();
+      const recusa = ErroDaApi(status: 422, codigo: 'OUTRA_RECUSA', mensagem: 'Não dá para cancelar agora.');
+      await abrir(
+        tester,
+        reserva(),
+        pagar: [checkout],
+        cancelar: [resposta],
+        lidas: [for (var i = 0; i < 9; i++) aguardando],
+      );
+      await tocarEmAbrir(tester);
+      await voltarAoApp(tester);
+      await passar(tester, const Duration(seconds: 15));
+      await tester.pump();
+      expect(consultas.pedidosDeConsulta, hasLength(5));
+
+      await tester.tap(find.text('Cancelar reserva'));
+      await tester.pumpAndSettle();
+      await tester.tap(noDialogo('Cancelar consulta'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await passar(tester, const Duration(seconds: 20));
+      // Com o cancelamento no ar, ninguém confere.
+      expect(consultas.pedidosDeConsulta, hasLength(5));
+
+      resposta.completeError(recusa);
+      await tester.pump();
+      await tester.pump();
+      // A releitura do cancelamento, e a conferência de volta.
+      expect(consultas.pedidosDeConsulta, hasLength(6));
+      expect(find.text('Não dá para cancelar agora.'), findsOneWidget);
+      await passar(tester, const Duration(seconds: 10));
+      expect(consultas.pedidosDeConsulta, hasLength(7));
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sair'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('o prazo vence durante o cancelamento, e a resposta não chega: a folha da reserva vencida', (
+      tester,
+    ) async {
+      final resposta = Completer<Consulta>();
+      await abrir(tester, reserva(), cancelar: [resposta], lidas: [const ErroDaApi.semConexao()]);
+
+      await tester.tap(find.text('Cancelar reserva'));
+      await tester.pumpAndSettle();
+      await tester.tap(noDialogo('Cancelar consulta'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await chegarAoPrazo(tester);
+      await tester.pump();
+      // Com a tela ocupada cancelando, o prazo espera o fim do pedido.
+      expect(find.text(tituloDaFolha), findsNothing);
+
+      resposta.completeError(const ErroDaApi.semConexao());
+      await tester.pumpAndSettle();
+      expect(find.text(tituloDaFolha), findsOneWidget);
     });
 
     testWidgets('a 200%, nada estoura, e o botão continua ao alcance', (tester) async {

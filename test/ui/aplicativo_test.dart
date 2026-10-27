@@ -17,6 +17,7 @@ import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:agendamento_clinico/ui/conta/criar_conta_screen.dart';
 import 'package:agendamento_clinico/ui/conta/entrar_screen.dart';
 import 'package:agendamento_clinico/ui/conta/esqueci_a_senha_screen.dart';
+import 'package:agendamento_clinico/ui/inicio/inicio_screen.dart';
 import 'package:agendamento_clinico/ui/perfil/perfil_screen.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
 import 'package:agendamento_clinico/ui/shell/shell_screen.dart';
@@ -41,8 +42,33 @@ class ApiFalsa {
   /// Pago" confirma o pagamento.
   String statusDaConsulta = 'pendente_pagamento';
 
+  /// O motivo, quando a consulta 90 é cancelada.
+  String? motivoDaConsulta;
+
   /// O horário reservado por último, para o detalhe da consulta.
   int horarioReservado = 0;
+
+  /// O prazo da reserva, como o agendamento o devolveu.
+  String? prazoDaReserva;
+
+  /// A consulta 90 como a API a escreve; [completa], com o horário e o
+  /// profissional, como a lista e o detalhe a trazem.
+  Map<String, Object?> consulta90({bool completa = true, bool comPrazo = true}) => {
+        'id': 90,
+        'status': statusDaConsulta,
+        'motivoCancelamento': motivoDaConsulta,
+        'horarioId': horarioReservado,
+        'valorCentavos': 25000,
+        'valorFormatado': 'R\$ 250,00',
+        'reservaExpiraEm': comPrazo ? prazoDaReserva : null,
+        'criadoEm': DateTime.now().toUtc().toIso8601String(),
+        if (completa) ...{
+          'horario': (grade()['horarios']! as List<Object?>)
+              .cast<Map<String, Object?>>()
+              .firstWhere((h) => h['id'] == horarioReservado),
+          'profissional': cardiologista,
+        },
+      };
   final pedidos = <http.Request>[];
 
   /// Respostas forçadas, por "MÉTODO /caminho", consumidas uma vez.
@@ -109,18 +135,13 @@ class ApiFalsa {
         }(),
       'PATCH /pacientes/me' => json(200, perfil(nome: 'Ana Lima Sá')),
       // A reserva do horário pedido, aguardando pagamento por 15 minutos.
-      'POST /consultas' => json(201, {
-          'consulta': {
-            'id': 90,
-            'status': 'pendente_pagamento',
-            'motivoCancelamento': null,
-            'horarioId': horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int,
-            'valorCentavos': 25000,
-            'valorFormatado': 'R\$ 250,00',
-            'reservaExpiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
-            'criadoEm': DateTime.now().toUtc().toIso8601String(),
-          },
-        }),
+      'POST /consultas' => () {
+          horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int;
+          prazoDaReserva = DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String();
+          statusDaConsulta = 'pendente_pagamento';
+          motivoDaConsulta = null;
+          return json(201, {'consulta': consulta90(completa: false)});
+        }(),
       // A página de pagamento, em ambiente de teste.
       'POST /consultas/90/pagamento' => json(201, {
           'pagamento': {
@@ -132,26 +153,18 @@ class ApiFalsa {
           },
         }),
       // A consulta como a API a tem: o status é o que o teste disser.
-      'GET /consultas/90' => json(200, {
-          'consulta': {
-            'id': 90,
-            'status': statusDaConsulta,
-            'motivoCancelamento': null,
-            'horarioId': horarioReservado,
-            'valorCentavos': 25000,
-            'valorFormatado': 'R\$ 250,00',
-            'reservaExpiraEm': null,
-            'criadoEm': DateTime.now().toUtc().toIso8601String(),
-            'horario': (grade()['horarios']! as List<Object?>)
-                .cast<Map<String, Object?>>()
-                .firstWhere((h) => h['id'] == horarioReservado),
-            'profissional': cardiologista,
-          },
-        }),
+      'GET /consultas/90' => json(200, {'consulta': consulta90(comPrazo: false)}),
+      // As consultas do paciente: a 90, depois de reservada.
       'GET /consultas' => json(200, {
-          'consultas': <Object>[],
-          'paginacao': {'pagina': 1, 'limite': 20, 'total': 0, 'paginas': 1},
+          'consultas': [if (horarioReservado != 0) consulta90()],
+          'paginacao': {'pagina': 1, 'limite': 20, 'total': horarioReservado != 0 ? 1 : 0, 'paginas': 1},
         }),
+      // O cancelamento, como a API o responde: sem o horário nem o profissional.
+      'PATCH /consultas/90/cancelamento' => () {
+          statusDaConsulta = 'cancelada';
+          motivoDaConsulta = 'paciente';
+          return json(200, {'consulta': consulta90(completa: false)});
+        }(),
       _ => json(404, erro('ROTA_NAO_ENCONTRADA', 'Não existe $rota nesta API.')),
     };
   });
@@ -217,6 +230,40 @@ Future<void> tocar(WidgetTester tester, String texto) async {
   await tester.tap(botao.first);
   await tester.pumpAndSettle();
 }
+
+/// Toca numa aba da barra de baixo — o rótulo dentro da barra, e não o título
+/// da tela, que pode ter o mesmo texto.
+Future<void> abrirAba(WidgetTester tester, String rotulo) async {
+  await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(rotulo)));
+  await tester.pumpAndSettle();
+}
+
+/// Pela busca: o cardiologista, as 14:30 de amanhã, o resumo e a reserva —
+/// termina na tela do pagamento.
+Future<void> reservarAs1430(WidgetTester tester) async {
+  await abrirAba(tester, 'Buscar');
+  await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+  await tester.tap(find.text('14:30'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Continuar'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Confirmar e ir para o pagamento'));
+  await tester.pumpAndSettle();
+}
+
+/// Sai do pagamento sem pagar, pelo voltar do Android e o "Sair" do diálogo.
+Future<void> sairDoPagamento(WidgetTester tester) async {
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Sair'));
+  await tester.pumpAndSettle();
+}
+
+int abaEscolhida(WidgetTester tester) => tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
 
 bool podeVoltar(WidgetTester tester) => tester.state<NavigatorState>(find.byType(Navigator).first).canPop();
 
@@ -390,12 +437,26 @@ void main() {
 
   testWidgets('quem entra com perfil vai direto ao aplicativo', (tester) async {
     final autenticacao = AutenticacaoFalsa();
-    await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
 
     await sessao(tester, autenticacao, ana);
 
     expect(find.byType(ShellScreen), findsOneWidget);
-    // A primeira aba é a busca, já com os profissionais da API.
+    // A barra, na ordem da checklist (4.4), e a primeira aba é o Início: sem
+    // consulta nenhuma, o convite para agendar.
+    final barra = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(barra.selectedIndex, 0);
+    expect(
+      [for (final destino in barra.destinations) (destino as NavigationDestination).label],
+      ['Início', 'Buscar', 'Minhas consultas', 'Perfil'],
+    );
+    expect(find.byType(InicioScreen), findsOneWidget);
+    expect(find.text('Você ainda não tem consultas'), findsOneWidget);
+    expect(api.pedidosA('GET', '/consultas'), isNotEmpty);
+
+    // A busca, já com os profissionais da API.
+    await abrirAba(tester, 'Buscar');
     expect(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'), findsOneWidget);
   });
 
@@ -407,6 +468,7 @@ void main() {
     await sessao(tester, autenticacao, ana);
 
     // Buscar: a especialidade, e o cardiologista na lista.
+    await abrirAba(tester, 'Buscar');
     expect(find.byType(BuscaScreen), findsOneWidget);
     await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
     await tester.pumpAndSettle();
@@ -451,6 +513,7 @@ void main() {
     final api = ApiFalsa(temPerfil: true);
     await montar(tester, autenticacao, api);
     await sessao(tester, autenticacao, ana);
+    await abrirAba(tester, 'Buscar');
 
     // O cardiologista, e as 14:30 de amanhã.
     await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
@@ -526,6 +589,7 @@ void main() {
     final abridor = AbridorDeLinksFalso();
     await montar(tester, autenticacao, api, abridor: abridor);
     await sessao(tester, autenticacao, ana);
+    await abrirAba(tester, 'Buscar');
 
     // O cardiologista, as 14:30 de amanhã, o resumo e a reserva.
     await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
@@ -569,11 +633,158 @@ void main() {
     expect(find.text('Consulta confirmada'), findsOneWidget);
     expect(find.text('Centro, Quixadá - CE'), findsOneWidget);
 
-    // Voltar dali leva à busca, e não ao pagamento.
+    // Voltar dali leva ao Início, e não ao pagamento — e o Início, pedido de
+    // novo na volta, já mostra a consulta paga.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(BuscaScreen), findsOneWidget);
+    expect(find.byType(InicioScreen), findsOneWidget);
     expect(find.text('Pagamento'), findsNothing);
+    expect(find.text('Sua próxima consulta'), findsOneWidget);
+  });
+
+  testWidgets('o portão em miniatura da Etapa 16: a reserva no Início, os detalhes, cancelar e agendar de novo', (
+    tester,
+  ) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
+    await sessao(tester, autenticacao, ana);
+    expect(find.text('Você ainda não tem consultas'), findsOneWidget);
+
+    // Reservar e sair sem pagar: na volta, o shell pede as consultas de novo.
+    await reservarAs1430(tester);
+    expect(find.text('Pagamento'), findsOneWidget);
+    await sairDoPagamento(tester);
+
+    // O Início mostra a reserva, e "Pagar agora" reabre o pagamento, sem a etapa.
+    await abrirAba(tester, 'Início');
+    expect(find.textContaining('Reserva aguardando pagamento. Carlos Eduardo Timbó'), findsOneWidget);
+    await tester.tap(find.text('Pagar agora'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pagamento'), findsOneWidget);
+    expect(find.text('Etapa 3 de 3'), findsNothing);
+    await sairDoPagamento(tester);
+
+    // Minhas consultas: a reserva nas próximas; os detalhes; cancelar.
+    await abrirAba(tester, 'Minhas consultas');
+    expect(find.text('Próximas (1)'), findsOneWidget);
+    await tester.tap(find.textContaining('·\u00a014:30').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(of: find.text('Cancelar consulta'), matching: find.byType(OutlinedButton)));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancelar esta consulta?'), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Cancelar consulta')));
+    await tester.pumpAndSettle();
+    final cancelamento = api.pedidosA('PATCH', '/consultas/90/cancelamento').single;
+    expect(cancelamento.headers['Authorization'], 'Bearer token-de-teste');
+    expect(find.text('Consulta cancelada.'), findsOneWidget);
+    expect(find.text('Cancelada'), findsOneWidget);
+
+    // De volta à lista, pedida de novo: a consulta passou às anteriores.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Próximas (0)'), findsOneWidget);
+    expect(find.text('Anteriores (1)'), findsOneWidget);
+    await tester.tap(find.text('Anteriores (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agendar de novo com Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfissionalScreen), findsOneWidget);
+  });
+
+  testWidgets('sair e entrar de novo começa no Início', (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+    await sessao(tester, autenticacao, ana);
+    await abrirAba(tester, 'Minhas consultas');
+    expect(abaEscolhida(tester), 2);
+
+    await sessao(tester, autenticacao, null);
+    await sessao(tester, autenticacao, ana);
+
+    expect(abaEscolhida(tester), 0);
+    expect(find.byType(InicioScreen), findsOneWidget);
+  });
+
+  testWidgets('fechar um diálogo por cima do shell não pede as consultas de novo; fechar uma tela, pede', (
+    tester,
+  ) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
+    await sessao(tester, autenticacao, ana);
+    final antes = api.pedidosA('GET', '/consultas').length;
+
+    await abrirAba(tester, 'Perfil');
+    await tocar(tester, 'Sair da conta');
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Cancelar')));
+    await tester.pumpAndSettle();
+    expect(api.pedidosA('GET', '/consultas'), hasLength(antes));
+
+    await abrirAba(tester, 'Buscar');
+    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(api.pedidosA('GET', '/consultas'), hasLength(antes + 1));
+  });
+
+  testWidgets('a sessão que cai com uma tela por cima do shell não faz pedir as consultas', (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
+    await sessao(tester, autenticacao, ana);
+    await abrirAba(tester, 'Buscar');
+    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+    await tester.pumpAndSettle();
+    final antes = api.pedidosA('GET', '/consultas').length;
+
+    await sessao(tester, autenticacao, null);
+
+    expect(find.byType(ShellScreen), findsNothing);
+    expect(api.pedidosA('GET', '/consultas'), hasLength(antes));
+  });
+
+  testWidgets('a especialidade escolhida no Início abre a busca com ela, e com o campo vazio', (tester) async {
+    final autenticacao = AutenticacaoFalsa();
+    final api = ApiFalsa(temPerfil: true);
+    await montar(tester, autenticacao, api);
+    await sessao(tester, autenticacao, ana);
+    await abrirAba(tester, 'Buscar');
+    await tester.enterText(find.byType(TextField), 'carlos');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    await abrirAba(tester, 'Início');
+    await tester.scrollUntilVisible(
+      find.widgetWithText(ListTile, 'Cardiologia'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.widgetWithText(ListTile, 'Cardiologia'));
+    await tester.pumpAndSettle();
+
+    expect(abaEscolhida(tester), 1);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+    expect(tester.widget<ChipDeEscolha>(find.widgetWithText(ChipDeEscolha, 'Cardiologia')).escolhido, isTrue);
+    expect(api.pedidosA('GET', '/profissionais').last.url.queryParameters, {'especialidade': '1', 'pagina': '1'});
+  });
+
+  testWidgets('a barra de quatro abas, a 200% num aparelho estreito: nada estoura', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final autenticacao = AutenticacaoFalsa();
+    await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+    await sessao(tester, autenticacao, ana);
+
+    for (final aba in ['Buscar', 'Minhas consultas', 'Perfil', 'Início']) {
+      await abrirAba(tester, aba);
+      expect(tester.takeException(), isNull, reason: aba);
+    }
   });
 
   testWidgets('trocar de área fecha as telas abertas por cima', (tester) async {
@@ -734,8 +945,7 @@ void main() {
     final autenticacao = AutenticacaoFalsa();
     await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
     await sessao(tester, autenticacao, ana);
-    await tester.tap(find.text('Perfil'));
-    await tester.pumpAndSettle();
+    await abrirAba(tester, 'Perfil');
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();

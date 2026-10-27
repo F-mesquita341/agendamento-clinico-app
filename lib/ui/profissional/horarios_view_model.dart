@@ -278,6 +278,10 @@ class HorariosViewModel extends ChangeNotifier {
   /// Marca o relógio para o começo do próximo horário da grade. Nessa hora ele
   /// sai da tela, e a escolha e o dia são conferidos de novo — sem a pessoa
   /// precisar atualizar.
+  ///
+  /// O relógio pode ficar marcado para dias depois, de propósito: é um só,
+  /// trocado a cada carga e cancelado ao fechar a tela. Se o aparelho dormir
+  /// além da hora, ele dispara na volta, e a conferência acontece então.
   void _marcarRelogio() {
     _relogio?.cancel();
     // Resposta que chega depois de a tela fechar não deixa relógio para trás.

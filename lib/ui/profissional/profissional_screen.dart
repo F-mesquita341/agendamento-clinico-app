@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_do_catalogo.dart';
-import '../../data/services/abridor_de_links.dart';
-import '../../domain/models/clinica.dart';
 import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/horario.dart';
@@ -13,6 +11,7 @@ import '../../domain/models/profissional.dart';
 import '../agendamento/etapa_do_agendamento.dart';
 import '../agendamento/resumo_screen.dart';
 import '../agendamento/resumo_view_model.dart';
+import '../comum/atalhos_da_clinica.dart';
 import '../comum/avatar.dart';
 import '../comum/botoes.dart';
 import '../comum/datas.dart';
@@ -257,7 +256,7 @@ class _ClinicaEValor extends StatelessWidget {
             ),
             if (clinica.endereco != null || clinica.telefone != null) ...[
               const Divider(height: 1),
-              _Atalhos(clinica: clinica),
+              AtalhosDaClinica(clinica: clinica),
             ],
             const Divider(height: 1),
           ],
@@ -303,58 +302,6 @@ class _Linha extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _Atalhos extends StatelessWidget {
-  const _Atalhos({required this.clinica});
-
-  final Clinica clinica;
-
-  @override
-  Widget build(BuildContext context) {
-    final endereco = clinica.endereco;
-    final telefone = clinica.telefone;
-    return Row(
-      children: [
-        if (endereco != null)
-          Expanded(
-            child: TextButton.icon(
-              onPressed: () => _abrir(
-                context,
-                // O nome da clínica ajuda o mapa a achar o lugar certo no endereço.
-                (abridor) => abridor.abrirNoMapa('${clinica.nome}, $endereco'),
-                seFalhar: 'Não foi possível abrir o mapa. O endereço é $endereco.',
-              ),
-              icon: const Icon(Icons.map_outlined),
-              label: const Text('Abrir no mapa'),
-            ),
-          ),
-        if (telefone != null)
-          Expanded(
-            child: TextButton.icon(
-              onPressed: () => _abrir(
-                context,
-                (abridor) => abridor.ligar(telefone),
-                seFalhar: 'Não foi possível abrir o telefone. O número da clínica é $telefone.',
-              ),
-              icon: const Icon(Icons.call_outlined),
-              label: const Text('Ligar'),
-            ),
-          ),
-      ],
-    );
-  }
-
-  /// Sai do aplicativo para o mapa ou o discador. Se o aparelho não tem com o
-  /// que abrir, o dado vai na mensagem, para a pessoa usá-lo como puder.
-  Future<void> _abrir(
-    BuildContext context,
-    Future<bool> Function(AbridorDeLinks abridor) abrir, {
-    required String seFalhar,
-  }) async {
-    final abriu = await abrir(context.read<AbridorDeLinks>());
-    if (!abriu && context.mounted) mostrarRetorno(context, TipoDeRetorno.erro, seFalhar);
   }
 }
 

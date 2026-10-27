@@ -12,10 +12,11 @@ import '../comum/datas.dart';
 import '../comum/espaco.dart';
 import '../comum/retorno.dart';
 import '../comum/selo_de_status.dart';
+import '../shell/abas_do_shell.dart';
 import 'cartao_da_consulta.dart';
 
-/// A consulta confirmada, aberta no lugar do pagamento: voltar dela leva à
-/// busca, e nunca de novo ao checkout (checklist, item 3.3).
+/// A consulta confirmada, aberta no lugar do pagamento: voltar dela leva ao
+/// Início, e nunca de novo ao checkout (checklist, item 3.3).
 ///
 /// Monta-se com a consulta como a API a devolveu ao confirmar, e não com o
 /// que a tela do pagamento tinha (item 1.4). O profissional e o horário de
@@ -119,29 +120,48 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
         ),
       ],
     ];
-    final voltar = BotaoPrincipal(
-      rotulo: 'Voltar à busca',
-      aoTocar: () => Navigator.of(context).popUntil((rota) => rota.isFirst),
+    // O rodapé do modelo: a consulta na lista dela, ou o Início — escolhendo a
+    // aba do shell antes de voltar a ele.
+    void irPara(AbaDoShell aba) {
+      context.read<AbasDoShell>().mostrar(aba);
+      Navigator.of(context).popUntil((rota) => rota.isFirst);
+    }
+
+    final voltar = Column(
+      spacing: Espaco.pequeno,
+      children: [
+        BotaoPrincipal(rotulo: 'Ver minhas consultas', aoTocar: () => irPara(AbaDoShell.consultas)),
+        BotaoDeTexto(rotulo: 'Voltar ao início', aoTocar: () => irPara(AbaDoShell.inicio)),
+      ],
     );
 
-    return Scaffold(
-      body: SafeArea(
-        child: fonteGrande
-            ? ListView(
-                padding: const EdgeInsets.all(Espaco.margem),
-                children: [...conteudo, const SizedBox(height: Espaco.grande), voltar],
-              )
-            : Column(
-                children: [
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(Espaco.margem, Espaco.maior, Espaco.margem, Espaco.margem),
-                      children: conteudo,
+    return PopScope(
+      // Voltar pelo gesto, ou pelo botão do Android, leva ao Início, pelo mesmo
+      // caminho do rodapé. Os botões do rodapé fecham a tela por conta própria,
+      // e a aba que escolheram fica.
+      canPop: false,
+      onPopInvokedWithResult: (saiu, _) {
+        if (!saiu) irPara(AbaDoShell.inicio);
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: fonteGrande
+              ? ListView(
+                  padding: const EdgeInsets.all(Espaco.margem),
+                  children: [...conteudo, const SizedBox(height: Espaco.grande), voltar],
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(Espaco.margem, Espaco.maior, Espaco.margem, Espaco.margem),
+                        children: conteudo,
+                      ),
                     ),
-                  ),
-                  Padding(padding: const EdgeInsets.all(Espaco.medio), child: voltar),
-                ],
-              ),
+                    Padding(padding: const EdgeInsets.all(Espaco.medio), child: voltar),
+                  ],
+                ),
+        ),
       ),
     );
   }

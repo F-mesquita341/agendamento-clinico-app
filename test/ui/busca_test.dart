@@ -806,7 +806,8 @@ void main() {
       expect(find.textContaining(mensagemDeDemora), findsNothing);
     });
 
-    testWidgets('atualizar e mostrar mais ao mesmo tempo: o aviso só some quando os dois terminam', (tester) async {
+    testWidgets('atualizar com "mostrar mais" no ar: a página antiga não entra na lista nova, e o aviso some com a '
+        'atualização', (tester) async {
       final pagina2 = Completer<Pagina<Profissional>>();
       final atualizacao = Completer<Pagina<Profissional>>();
       await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
@@ -823,12 +824,36 @@ void main() {
       atualizacao.complete(paginaDe([ana], paginas: 2, total: 2));
       await tester.pump();
       await tester.pump();
-      // A página seguinte ainda espera: o aviso continua.
-      expect(find.textContaining(mensagemDeDemora), findsOneWidget);
+      // A página seguinte da lista antiga ainda está no ar, mas não conta mais.
+      expect(find.textContaining(mensagemDeDemora), findsNothing);
+      expect(find.text('Mostrar mais profissionais'), findsOneWidget);
 
       pagina2.complete(paginaDe([timbo], pagina: 2, paginas: 2, total: 2));
       await tester.pumpAndSettle();
-      expect(find.textContaining(mensagemDeDemora), findsNothing);
+      expect(find.text(timbo.nome), findsNothing);
+      expect(find.text('Mostrar mais profissionais'), findsOneWidget);
+    });
+
+    testWidgets('durante a atualização, "mostrar mais" some e não pede nada', (tester) async {
+      final atualizacao = Completer<Pagina<Profissional>>();
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana], paginas: 2, total: 2),
+        atualizacao,
+        paginaDe([timbo], pagina: 2, paginas: 2, total: 2),
+      ]);
+      await montar(tester, catalogo);
+      await puxarParaAtualizar(tester);
+
+      expect(find.text('Mostrar mais profissionais'), findsNothing);
+      await tester.element(find.byType(BuscaScreen)).read<BuscaViewModel>().mostrarMais();
+      expect(catalogo.pedidosDeProfissionais.map((p) => p.pagina), [1, 1]);
+
+      atualizacao.complete(paginaDe([ana], paginas: 2, total: 2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mostrar mais profissionais'));
+      await tester.pumpAndSettle();
+      expect(catalogo.pedidosDeProfissionais.map((p) => p.pagina), [1, 1, 2]);
+      expect(find.text(timbo.nome), findsOneWidget);
     });
 
     testWidgets('busca nova: a resposta que vai ser descartada não deixa o aviso na tela', (tester) async {

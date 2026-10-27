@@ -58,3 +58,9 @@ String diaPorInteiro(DataCivil dia, {required DataCivil hoje}) {
   final porExtenso = diaPorExtenso(dia, hoje: hoje);
   return relativo == null ? comInicialMaiuscula(porExtenso) : '$relativo, $porExtenso';
 }
+
+/// "Amanhã, quinta-feira, 15/10 · 14:30": o dia por inteiro e a hora. A data e
+/// a hora não se separam numa quebra de linha, e o ponto do meio não fica
+/// sozinho no fim de uma.
+String diaEHora(DataCivil dia, String hora, {required DataCivil hoje}) =>
+    '${diaPorInteiro(dia, hoje: hoje)}\u00a0·\u00a0$hora';

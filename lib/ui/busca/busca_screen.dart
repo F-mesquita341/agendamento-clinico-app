@@ -27,9 +27,24 @@ class BuscaScreen extends StatefulWidget {
 
 class _BuscaScreenState extends State<BuscaScreen> {
   final _campo = TextEditingController();
+  late final BuscaViewModel _vm;
+
+  @override
+  void initState() {
+    super.initState();
+    _vm = context.read<BuscaViewModel>()..addListener(_seguirOTexto);
+  }
+
+  /// O campo segue o texto da busca quando outra tela o troca — escolher uma
+  /// especialidade no Início esvazia o campo. Num ouvinte, e não ao construir:
+  /// trocar o texto do campo no meio da construção não é permitido.
+  void _seguirOTexto() {
+    if (_campo.text != _vm.texto) _campo.text = _vm.texto;
+  }
 
   @override
   void dispose() {
+    _vm.removeListener(_seguirOTexto);
     _campo.dispose();
     super.dispose();
   }
@@ -167,7 +182,7 @@ class _BuscaScreenState extends State<BuscaScreen> {
                     ],
                     if (vm.mostrandoMais)
                       IndicadorDeCarga(demorando: vm.demorando)
-                    else if (vm.temMais)
+                    else if (vm.temMais && !vm.atualizando)
                       ComMargem(
                         child: BotaoSecundario(rotulo: 'Mostrar mais profissionais', aoTocar: vm.mostrarMais),
                       ),

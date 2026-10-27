@@ -46,3 +46,7 @@ Iterable<String> _formasDeChamar(Especialidade especialidade) {
   // As palavras de ligação ("de", "da", "e") não levam a especialidade nenhuma.
   return [nome, apoio, ...nome.split(' '), ...apoio.split(' ')].where((forma) => forma.length > 2);
 }
+
+/// Como as pessoas chamam a especialidade — "coração", para Cardiologia —,
+/// para aparecer junto do nome (checklist, item 2.7). Null se não há.
+String? apoioDaEspecialidade(Especialidade especialidade) => _apoio[semAcento(especialidade.nome)];
