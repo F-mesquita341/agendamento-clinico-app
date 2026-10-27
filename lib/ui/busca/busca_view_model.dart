@@ -39,6 +39,7 @@ class BuscaViewModel extends ChangeNotifier {
   int _pagina = 1;
   bool _temMais = false;
   bool _mostrandoMais = false;
+  bool _atualizando = false;
   ErroDaApi? _erro;
   ErroDaApi? _erroAoAtualizar;
   ErroDaApi? _erroAoMostrarMais;
@@ -66,6 +67,10 @@ class BuscaViewModel extends ChangeNotifier {
   String? get termo => _termo;
 
   /// Há uma letra só no campo: a API pede duas, e a tela diz isso.
+  /// O texto do campo, como a pessoa digitou — ou vazio, quando outra tela
+  /// escolheu a especialidade.
+  String get texto => _texto;
+
   bool get textoCurto => _texto.trim().length == 1;
 
   bool get temFiltro => _especialidadeId != null || _texto.trim().isNotEmpty;
@@ -82,6 +87,9 @@ class BuscaViewModel extends ChangeNotifier {
   int get total => _total;
   bool get temMais => _temMais;
   bool get mostrandoMais => _mostrandoMais;
+
+  /// A lista está sendo pedida de novo, com ela na tela.
+  bool get atualizando => _atualizando;
 
   /// Por que a busca falhou.
   ErroDaApi? get erro => _erro;
@@ -120,6 +128,10 @@ class BuscaViewModel extends ChangeNotifier {
   /// o campo de busca o esvazia.
   void aceitarSugestao(Especialidade sugerida) => _ficarSoCom(sugerida.id);
 
+  /// Os profissionais de uma especialidade, escolhida fora da busca — no
+  /// Início. O texto digitado sai, para a lista ser a da especialidade toda.
+  void mostrarEspecialidade(int especialidadeId) => _ficarSoCom(especialidadeId);
+
   void _ficarSoCom(int? especialidadeId) {
     _texto = '';
     _especialidadeId = especialidadeId;
@@ -128,15 +140,23 @@ class BuscaViewModel extends ChangeNotifier {
 
   /// Puxar para atualizar: a primeira página de novo, com a lista na tela. Se
   /// falhar, a lista fica e [erroAoAtualizar] diz por quê.
+  ///
+  /// A página 1 nova invalida um "mostrar mais" que ainda esteja no ar: a
+  /// página seguinte da lista antiga, chegando depois, seria acrescentada à
+  /// lista nova (revisão de 19/10). Enquanto atualiza, "mostrar mais" espera.
   Future<void> atualizar() async {
     if (_estado != EstadoDaCarga.pronto) return _buscar();
-    final busca = _busca;
+    final busca = ++_busca;
+    _atualizando = true;
+    _mostrandoMais = false;
     _erroAoAtualizar = null;
     _erroAoMostrarMais = null;
+    _aviso.esquecerPedidos();
     _notificar();
 
     final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1));
     if (busca != _busca) return;
+    _atualizando = false;
     if (pagina != null) {
       _mostrar(pagina);
     } else {
@@ -151,7 +171,7 @@ class BuscaViewModel extends ChangeNotifier {
   /// um segundo pedido da mesma página duplicaria os profissionais na lista, e
   /// um pedido durante uma busca nova levaria a página de uma lista que já saiu.
   Future<void> mostrarMais() async {
-    if (_mostrandoMais || !_temMais || _estado != EstadoDaCarga.pronto) return;
+    if (_mostrandoMais || _atualizando || !_temMais || _estado != EstadoDaCarga.pronto) return;
     final busca = _busca;
     _mostrandoMais = true;
     _erroAoMostrarMais = null;
@@ -177,6 +197,7 @@ class BuscaViewModel extends ChangeNotifier {
     _erroAoAtualizar = null;
     _erroAoMostrarMais = null;
     _mostrandoMais = false;
+    _atualizando = false;
     // As respostas das buscas anteriores vão ser descartadas: não contam mais
     // para o aviso de demora.
     _aviso.esquecerPedidos();

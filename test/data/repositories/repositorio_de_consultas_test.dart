@@ -114,11 +114,29 @@ void main() {
       expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
     });
 
-    test('lê cada consulta com o horário, e a paginação', () async {
+    const profissional = {
+      'id': 2,
+      'nome': 'Carlos Eduardo Timbó',
+      'registroConselho': 'CRM-CE 12345',
+      'especialidade': {'id': 2, 'nome': 'Cardiologia'},
+      'valorCentavos': 25000,
+      'valorFormatado': 'R\$ 250,00',
+      'clinica': {'id': 1, 'nome': 'Clínica Exemplo Quixadá', 'telefone': null, 'endereco': null},
+    };
+
+    test('lê cada consulta com o horário e o profissional, e a paginação', () async {
       final pagina = await consultas({
         'consultas': [
-          {...reservada, 'horario': horario},
-          {...reservada, 'id': 30, 'status': 'cancelada', 'reservaExpiraEm': null, 'horario': horario},
+          {...reservada, 'horario': horario, 'profissional': profissional},
+          {
+            ...reservada,
+            'id': 30,
+            'status': 'cancelada',
+            'motivoCancelamento': 'paciente',
+            'reservaExpiraEm': null,
+            'horario': horario,
+            'profissional': profissional,
+          },
         ],
         'paginacao': {'pagina': 1, 'limite': 20, 'paginas': 1, 'total': 2},
       }).minhas();
@@ -128,8 +146,32 @@ void main() {
         (30, StatusDaConsulta.cancelada),
       ]);
       expect(pagina.itens.first.horario?.inicio, DateTime.utc(2026, 10, 19, 12));
+      expect(pagina.itens.first.profissional?.nome, 'Carlos Eduardo Timbó');
       expect(pagina.itens.last.reservaExpiraEm, isNull);
+      expect(pagina.itens.last.motivoDoCancelamento, MotivoDoCancelamento.paciente);
       expect(pagina.temMais, isFalse);
+    });
+
+    test('consulta da lista sem o horário ou sem o profissional vira RESPOSTA_INESPERADA', () async {
+      const paginacao = {'pagina': 1, 'limite': 20, 'paginas': 1, 'total': 1};
+      await expectLater(
+        consultas({
+          'consultas': [
+            {...reservada, 'profissional': profissional},
+          ],
+          'paginacao': paginacao,
+        }).minhas(),
+        respostaInesperada,
+      );
+      await expectLater(
+        consultas({
+          'consultas': [
+            {...reservada, 'horario': horario},
+          ],
+          'paginacao': paginacao,
+        }).minhas(),
+        respostaInesperada,
+      );
     });
 
     test('lista sem a paginação vira RESPOSTA_INESPERADA', () async {
@@ -213,13 +255,11 @@ void main() {
       expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
     });
 
-    test('lê o endereço da página, o valor e o prazo — 201 e 200 dão o mesmo', () async {
+    test('lê o endereço da página — 201 e 200 dão o mesmo', () async {
       for (final status in [201, 200]) {
         final checkout = await consultas({'pagamento': pagamento}, status: status).pagar(31);
 
         expect(checkout.endereco, Uri.parse('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123'));
-        expect(checkout.valorFormatado, 'R\$ 250,00');
-        expect(checkout.expiraEm, DateTime.utc(2026, 10, 19, 12, 15));
       }
     });
 
@@ -247,6 +287,50 @@ void main() {
       await expectLater(
         repositorio.pagar(31),
         throwsA(isA<ErroDaApi>().having((e) => e.codigo, 'codigo', 'RESERVA_EXPIRADA')),
+      );
+    });
+  });
+
+  group('cancelar', () {
+    // A resposta do cancelamento, como a API a escreve: sem o horário nem o
+    // profissional.
+    final cancelada = <String, Object?>{
+      ...reservada,
+      'status': 'cancelada',
+      'motivoCancelamento': 'paciente',
+    };
+
+    test('pede o cancelamento da consulta, com PATCH, sem corpo e com o token da conta', () async {
+      await consultas({'consulta': cancelada}).cancelar(31);
+
+      final pedido = pedidos.single;
+      expect(pedido.method, 'PATCH');
+      expect(pedido.url.path, '/consultas/31/cancelamento');
+      expect(pedido.url.query, isEmpty);
+      expect(pedido.body, isEmpty);
+      expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
+    });
+
+    test('lê a consulta cancelada, com o motivo, mesmo sem o horário e o profissional', () async {
+      final consulta = await consultas({'consulta': cancelada}).cancelar(31);
+
+      expect(consulta.id, 31);
+      expect(consulta.status, StatusDaConsulta.cancelada);
+      expect(consulta.motivoDoCancelamento, MotivoDoCancelamento.paciente);
+      expect(consulta.horario, isNull);
+    });
+
+    test('a recusa chega com o código e a mensagem da API, e sem ação', () async {
+      final repositorio = consultas({
+        'erro': {'codigo': 'CONSULTA_JA_CANCELADA', 'mensagem': 'Esta consulta já foi cancelada.', 'acao': null},
+      }, status: 422);
+
+      await expectLater(
+        repositorio.cancelar(31),
+        throwsA(isA<ErroDaApi>()
+            .having((e) => e.codigo, 'codigo', 'CONSULTA_JA_CANCELADA')
+            .having((e) => e.mensagem, 'mensagem', 'Esta consulta já foi cancelada.')
+            .having((e) => e.acao, 'acao', AcaoSugerida.nenhuma)),
       );
     });
   });

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/pagina.dart';
 
@@ -66,11 +64,20 @@ T lerObjeto<T>(
   }
 }
 
+/// Para onde vai o registro de resposta fora do formato: o log do aparelho,
+/// também na versão de release, que é a dos portões. É um `print`, e não o
+/// `debugPrint` do Flutter, porque a camada de dados não depende do Flutter
+/// (revisão de 19/10). Os testes trocam o destino por uma lista.
+void Function(String mensagem) registrarRespostaForaDoFormato = _noLogDoAparelho;
+
+// ignore: avoid_print
+void _noLogDoAparelho(String mensagem) => print(mensagem);
+
 /// Para a tela, resposta fora do formato é só `RESPOSTA_INESPERADA`. No log do
 /// aparelho fica qual recurso e por quê: é por ali que uma mudança na API se
 /// descobre no portão ou numa sessão. Não é defeito do aplicativo, e por isso
 /// não passa por `relatarDefeito`.
 ErroDaApi _foraDoFormato(String chave, String motivo) {
-  debugPrint('Resposta fora do formato em "$chave": $motivo');
+  registrarRespostaForaDoFormato('Resposta fora do formato em "$chave": $motivo');
   return const ErroDaApi.respostaInesperada(200);
 }

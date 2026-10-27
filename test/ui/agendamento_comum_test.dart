@@ -168,7 +168,7 @@ void main() {
       expect(find.text('Saiba mais sobre o pagamento antecipado'), findsOneWidget);
     });
 
-    testWidgets('"Saiba mais" explica o porquê e a reserva, e "Entendi" fecha', (tester) async {
+    testWidgets('"Saiba mais" explica o porquê, a reserva e o que acontece com o valor, e "Entendi" fecha', (tester) async {
       await montar(tester, const PagamentoAntecipado());
 
       await tester.tap(find.text('Saiba mais sobre o pagamento antecipado'));
@@ -177,6 +177,11 @@ void main() {
       expect(find.text('Por que o pagamento é antecipado?'), findsOneWidget);
       expect(find.textContaining('reservado para você por 15 minutos'), findsOneWidget);
       expect(find.textContaining('a reserva expira e o horário volta a ficar livre'), findsOneWidget);
+      expect(
+        find.text('Se você cancelar até o horário da consulta, o valor pago é devolvido integralmente. '
+            'Se faltar sem cancelar, o valor não é devolvido.'),
+        findsOneWidget,
+      );
       expect(find.text('Nesta versão de teste, nenhum valor real é cobrado.'), findsOneWidget);
       expect(find.textContaining(RegExp('cau[çc][ãa]o', caseSensitive: false)), findsNothing);
 

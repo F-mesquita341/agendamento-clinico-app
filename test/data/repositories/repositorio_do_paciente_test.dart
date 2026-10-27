@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:agendamento_clinico/data/repositories/leitura_json.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/data/services/api_client.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -80,9 +80,9 @@ void main() {
 
     test('perfil fora do formato vira RESPOSTA_INESPERADA, e deixa no log o recurso e o motivo', () async {
       final registro = <String>[];
-      final original = debugPrint;
-      debugPrint = (mensagem, {wrapWidth}) => registro.add(mensagem ?? '');
-      addTearDown(() => debugPrint = original);
+      final original = registrarRespostaForaDoFormato;
+      registrarRespostaForaDoFormato = registro.add;
+      addTearDown(() => registrarRespostaForaDoFormato = original);
 
       await expectLater(
         repositorio(200, {

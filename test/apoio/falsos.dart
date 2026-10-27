@@ -186,19 +186,23 @@ class ConsultasFalso implements RepositorioDeConsultas {
     Iterable<Object?> minhas = const [],
     Iterable<Object?> consulta = const [],
     Iterable<Object?> pagar = const [],
+    Iterable<Object?> cancelar = const [],
   })  : respostasDeAgendar = Fila(agendar),
         respostasDeMinhas = Fila(minhas),
         respostasDeConsulta = Fila(consulta),
-        respostasDePagar = Fila(pagar);
+        respostasDePagar = Fila(pagar),
+        respostasDeCancelar = Fila(cancelar);
 
   final Fila respostasDeAgendar;
   final Fila respostasDeMinhas;
   final Fila respostasDeConsulta;
   final Fila respostasDePagar;
+  final Fila respostasDeCancelar;
   final pedidosDeAgendar = <({int horarioId, int versao})>[];
   final pedidosDeMinhas = <int>[];
   final pedidosDeConsulta = <int>[];
   final pedidosDePagar = <int>[];
+  final pedidosDeCancelar = <int>[];
 
   @override
   Future<Consulta> agendar({required int horarioId, required int versao}) {
@@ -222,6 +226,12 @@ class ConsultasFalso implements RepositorioDeConsultas {
   Future<Checkout> pagar(int consultaId) {
     pedidosDePagar.add(consultaId);
     return respostasDePagar.proxima<Checkout>();
+  }
+
+  @override
+  Future<Consulta> cancelar(int id) {
+    pedidosDeCancelar.add(id);
+    return respostasDeCancelar.proxima<Consulta>();
   }
 }
 

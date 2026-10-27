@@ -99,6 +99,20 @@ void main() {
       expect(tester.getSize(find.byType(OutlinedButton)).height, greaterThanOrEqualTo(56));
     });
 
+    testWidgets('o destrutivo, enviando, fica travado e diz o que está fazendo', (tester) async {
+      var toques = 0;
+      await montar(
+        tester,
+        BotaoDestrutivo(rotulo: 'Cancelar consulta', aoTocar: () => toques++, enviando: true, rotuloEnviando: 'Cancelando…'),
+      );
+
+      expect(find.text('Cancelando…'), findsOneWidget);
+      expect(find.text('Cancelar consulta'), findsNothing);
+      expect(tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed, isNull);
+      await tester.tap(find.byType(OutlinedButton));
+      expect(toques, 0);
+    });
+
     testWidgets('o de texto, mesmo com rótulo curto, tem 48 dp também no que se vê', (tester) async {
       await montar(tester, Align(child: BotaoDeTexto(rotulo: 'Ok', aoTocar: () {})));
 

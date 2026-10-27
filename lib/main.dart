@@ -19,6 +19,7 @@ import 'data/services/servico_de_autenticacao.dart';
 import 'ui/comum/textos.dart';
 import 'ui/sessao/portao_da_sessao.dart';
 import 'ui/sessao/sessao_view_model.dart';
+import 'ui/shell/abas_do_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +64,11 @@ class AplicativoDoPaciente extends StatefulWidget {
 class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
   late final SessaoViewModel _sessao;
   late final ApiClient _api;
+  final _abas = AbasDoShell();
+
+  /// Avisa o shell quando uma tela por cima dele fecha, para ele pedir as
+  /// consultas de novo. Só telas inteiras: fechar um diálogo não conta.
+  final _rotas = RouteObserver<PageRoute<dynamic>>();
 
   @override
   void initState() {
@@ -82,6 +88,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
   @override
   void dispose() {
     _sessao.dispose();
+    _abas.dispose();
     super.dispose();
   }
 
@@ -96,6 +103,8 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
         Provider<RepositorioDoPaciente>(create: (_) => RepositorioDoPacienteRemoto(_api)),
         Provider<RepositorioDoConsentimento>(create: (_) => RepositorioDoConsentimentoRemoto(_api)),
         ChangeNotifierProvider<SessaoViewModel>.value(value: _sessao),
+        ChangeNotifierProvider<AbasDoShell>.value(value: _abas),
+        Provider<RouteObserver<PageRoute<dynamic>>>.value(value: _rotas),
       ],
       child: MaterialApp(
         title: Textos.nomeDoApp,
@@ -103,6 +112,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
         locale: const Locale('pt', 'BR'),
         supportedLocales: const [Locale('pt', 'BR')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        navigatorObservers: [_rotas],
         home: PortaoDaSessao(lerArquivo: widget.lerArquivo ?? rootBundle.loadString),
       ),
     );

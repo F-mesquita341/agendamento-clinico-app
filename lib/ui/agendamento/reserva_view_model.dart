@@ -11,6 +11,7 @@ import '../../domain/models/horario.dart';
 import '../../domain/models/instante.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/defeitos.dart';
+import '../consultas/cancelamento.dart';
 
 /// Em que pé está o pagamento da reserva, do ponto de vista da tela.
 enum SituacaoDoPagamento {
@@ -34,11 +35,17 @@ enum SituacaoDoPagamento {
   /// reserva expirou.
   conferindoDepoisDoPrazo,
 
+  /// Cancelando a reserva, a pedido da pessoa.
+  cancelando,
+
   /// A API disse `confirmada`.
   confirmada,
 
   /// A reserva acabou: o prazo venceu, ou a consulta foi cancelada.
   encerrada,
+
+  /// A pessoa cancelou a reserva por esta tela.
+  cancelada,
 }
 
 /// A consulta reservada, esperando o pagamento: até quando a reserva vale,
@@ -173,8 +180,10 @@ class ReservaViewModel extends ChangeNotifier {
         SituacaoDoPagamento.abrindo ||
         SituacaoDoPagamento.conferindo ||
         SituacaoDoPagamento.conferindoDepoisDoPrazo ||
+        SituacaoDoPagamento.cancelando ||
         SituacaoDoPagamento.confirmada ||
-        SituacaoDoPagamento.encerrada =>
+        SituacaoDoPagamento.encerrada ||
+        SituacaoDoPagamento.cancelada =>
           true,
         _ => false,
       };
@@ -222,6 +231,43 @@ class ReservaViewModel extends ChangeNotifier {
     // O prazo pode ter vencido com o pedido no ar: o relógio encontrou a tela
     // ocupada e não decidiu nada. Se a página não abriu, a decisão é agora, e
     // não no próximo toque (revisão de 19/10, P4). Se abriu, é na volta.
+    if (prazoPassou && _situacao != SituacaoDoPagamento.noCheckout) _aoVencerOPrazo();
+    _notificar();
+  }
+
+  /// "Cancelar reserva" vale quando a tela não está fazendo outra coisa nem
+  /// já decidiu.
+  bool get podeCancelarAReserva => !_ocupado;
+
+  /// Cancela a reserva por esta tela, depois de a pessoa confirmar. É o mesmo
+  /// cancelamento dos detalhes da consulta: a decisão é pelo status relido.
+  Future<void> cancelarReserva() async {
+    if (_ocupado) return;
+    final antes = _situacao;
+    // A conferência que segue sozinha poderia decidir a tela no meio do
+    // cancelamento — a API dizendo "cancelada" antes da resposta dele. Ela
+    // para aqui, e volta se o cancelamento não acontecer.
+    _conferencia?.cancel();
+    _rodada++;
+    _situacao = SituacaoDoPagamento.cancelando;
+    _erro = null;
+    _notificar();
+
+    final desfecho = await _aviso.acompanhar(() => cancelarConsulta(_consultas, consulta.id));
+    if (_descartado) return;
+    _situacao = antes;
+    switch (desfecho) {
+      case ConsultaCancelada(consulta: Consulta(motivoDoCancelamento: MotivoDoCancelamento.paciente)):
+        _encerrarConferencias();
+        _situacao = SituacaoDoPagamento.cancelada;
+      case ConsultaCancelada(:final consulta):
+        // A API já tinha expirado a reserva: a folha da reserva vencida explica.
+        _aplicar(consulta);
+      case CancelamentoRecusado(:final mensagem, :final lida):
+        if (lida == null || !_aplicar(lida)) _erro = mensagem;
+    }
+    if (_situacao == SituacaoDoPagamento.pendente) _marcarProximaConferencia();
+    // O prazo pode ter vencido durante o pedido, com a tela ocupada.
     if (prazoPassou && _situacao != SituacaoDoPagamento.noCheckout) _aoVencerOPrazo();
     _notificar();
   }

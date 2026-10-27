@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:agendamento_clinico/data/repositories/leitura_json.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/services/api_client.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -215,9 +215,9 @@ void main() {
     late List<String> registro;
     setUp(() {
       registro = [];
-      final original = debugPrint;
-      debugPrint = (mensagem, {wrapWidth}) => registro.add(mensagem ?? '');
-      addTearDown(() => debugPrint = original);
+      final original = registrarRespostaForaDoFormato;
+      registrarRespostaForaDoFormato = registro.add;
+      addTearDown(() => registrarRespostaForaDoFormato = original);
     });
 
     test('diz o recurso e o motivo — o do modelo, quando é um item que não serve', () async {

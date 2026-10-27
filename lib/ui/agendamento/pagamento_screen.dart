@@ -14,7 +14,9 @@ import '../comum/espaco.dart';
 import '../comum/nota.dart';
 import '../comum/retorno.dart';
 import '../comum/textos.dart';
+import '../consultas/regras_de_cancelamento.dart';
 import '../profissional/profissional_screen.dart';
+import '../shell/abas_do_shell.dart';
 import 'cartao_da_consulta.dart';
 import 'consulta_confirmada_screen.dart';
 import 'etapa_do_agendamento.dart';
@@ -22,12 +24,16 @@ import 'pagamento_antecipado.dart';
 import 'reserva_view_model.dart';
 
 /// A tela do pagamento, aberta no lugar da grade e do resumo: voltar dela leva
-/// à busca, e nunca de novo ao resumo, que reservaria duas vezes.
+/// ao shell, e nunca de novo ao resumo, que reservaria duas vezes.
+///
+/// [reaberta]: aberta por "Pagar agora", no Início ou nos detalhes da
+/// consulta — sem a etapa do agendamento, porque ninguém está no meio dele.
 Route<void> rotaDoPagamento(
   Consulta consulta, {
   required Profissional profissional,
   required Horario horario,
   required DateTime Function() relogio,
+  bool reaberta = false,
 }) {
   return MaterialPageRoute<void>(
     builder: (_) => ChangeNotifierProvider(
@@ -39,7 +45,7 @@ Route<void> rotaDoPagamento(
         horario: horario,
         relogio: relogio,
       ),
-      child: const PagamentoScreen(),
+      child: PagamentoScreen(reaberta: reaberta),
     ),
   );
 }
@@ -48,7 +54,10 @@ Route<void> rotaDoPagamento(
 /// pagamento antecipado, feito na página do Mercado Pago em ambiente de teste
 /// (TCC, Seção 3.9.5). O aplicativo só abre a página: não coleta cartão.
 class PagamentoScreen extends StatefulWidget {
-  const PagamentoScreen({super.key});
+  const PagamentoScreen({super.key, this.reaberta = false});
+
+  /// Reaberta por "Pagar agora": sem "Etapa 3 de 3".
+  final bool reaberta;
 
   @override
   State<PagamentoScreen> createState() => _PagamentoScreenState();
@@ -95,6 +104,12 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
       case SituacaoDoPagamento.encerrada:
         _seguiu = true;
         unawaited(_avisarQueAcabou());
+      case SituacaoDoPagamento.cancelada:
+        // A reserva cancelada aparece em Minhas consultas, com a nota dela.
+        _seguiu = true;
+        context.read<AbasDoShell>().mostrar(AbaDoShell.consultas);
+        mostrarRetorno(context, TipoDeRetorno.sucesso, 'Consulta cancelada.');
+        Navigator.of(context).popUntil((rota) => rota.isFirst);
       default:
         break;
     }
@@ -121,8 +136,8 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     }
   }
 
-  /// Sair sem pagar pergunta antes: a reserva continua valendo, mas não há
-  /// caminho de volta a ela pelo aplicativo até a Etapa 16.
+  /// Sair sem pagar pergunta antes: a reserva continua valendo, e o caminho de
+  /// volta a ela é Minhas consultas.
   Future<void> _perguntarSeSai() async {
     final reservado = switch (_vm.ateAs) {
       final ateAs? => 'o horário fica reservado até $ateAs e depois volta a ficar livre.',
@@ -133,13 +148,19 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     final sai = await confirmar(
       context,
       titulo: _vm.abriuOCheckout ? 'Sair do pagamento?' : 'Sair sem pagar?',
-      texto: _vm.abriuOCheckout
-          ? 'Se você já pagou, a confirmação chega mesmo assim. Se não pagou, $reservado'
-          : comInicialMaiuscula(reservado),
+      texto: '${_vm.abriuOCheckout ? 'Se você já pagou, a confirmação chega mesmo assim. Se não pagou, $reservado' : comInicialMaiuscula(reservado)} '
+          'Para pagar depois, abra a consulta em Minhas consultas.',
       acao: 'Sair',
       desistir: 'Continuar pagamento',
     );
     if (sai && mounted) Navigator.of(context).popUntil((rota) => rota.isFirst);
+  }
+
+  /// "Cancelar reserva" pergunta antes, com o mesmo diálogo dos detalhes da
+  /// consulta (checklist, itens 3.4 e 5.7).
+  Future<void> _cancelarReserva() async {
+    if (!await confirmarCancelamento(context, confirmada: false)) return;
+    await _vm.cancelarReserva();
   }
 
   @override
@@ -147,7 +168,9 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     final vm = context.watch<ReservaViewModel>();
     final tema = Theme.of(context);
     final situacao = vm.situacao;
-    final acabou = situacao == SituacaoDoPagamento.confirmada || situacao == SituacaoDoPagamento.encerrada;
+    final acabou = situacao == SituacaoDoPagamento.confirmada ||
+        situacao == SituacaoDoPagamento.encerrada ||
+        situacao == SituacaoDoPagamento.cancelada;
     final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
 
     final conteudo = [
@@ -178,12 +201,27 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
         const SizedBox(height: Espaco.pequeno),
         BotaoPrincipal(
           rotulo: vm.abriuOCheckout ? 'Abrir pagamento de novo' : 'Abrir o pagamento',
-          rotuloEnviando: situacao == SituacaoDoPagamento.abrindo ? 'Abrindo o pagamento…' : 'Conferindo o pagamento…',
+          rotuloEnviando: switch (situacao) {
+            SituacaoDoPagamento.abrindo => 'Abrindo o pagamento…',
+            SituacaoDoPagamento.cancelando => 'Cancelando a reserva…',
+            _ => 'Conferindo o pagamento…',
+          },
           enviando: situacao == SituacaoDoPagamento.abrindo ||
               situacao == SituacaoDoPagamento.conferindo ||
-              situacao == SituacaoDoPagamento.conferindoDepoisDoPrazo,
+              situacao == SituacaoDoPagamento.conferindoDepoisDoPrazo ||
+              situacao == SituacaoDoPagamento.cancelando,
           aoTocar: vm.abrirPagamento,
         ),
+        if (vm.podeCancelarAReserva) ...[
+          const SizedBox(height: Espaco.pequeno),
+          Center(
+            child: TextButton(
+              style: TextButton.styleFrom(foregroundColor: tema.colorScheme.error),
+              onPressed: _cancelarReserva,
+              child: const Text('Cancelar reserva'),
+            ),
+          ),
+        ],
       ],
     ];
 
@@ -195,7 +233,10 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
         if (!saiu) _perguntarSeSai();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Pagamento'), bottom: etapaDoAgendamento(context, 3)),
+        appBar: AppBar(
+          title: const Text('Pagamento'),
+          bottom: widget.reaberta ? null : etapaDoAgendamento(context, 3),
+        ),
         body: SafeArea(
           // Como no resumo: o botão fica fixo no rodapé, e, com a fonte
           // grande, vai para o fim da lista, que rola inteira. O aviso de

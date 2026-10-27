@@ -58,10 +58,21 @@ class BotaoSecundario extends StatelessWidget {
 /// cor de erro, e leva o nome da ação (checklist, item 5.7). Pede confirmação
 /// antes: quem chama é que abre o diálogo.
 class BotaoDestrutivo extends StatelessWidget {
-  const BotaoDestrutivo({super.key, required this.rotulo, required this.aoTocar});
+  const BotaoDestrutivo({
+    super.key,
+    required this.rotulo,
+    required this.aoTocar,
+    this.enviando = false,
+    this.rotuloEnviando,
+  });
 
   final String rotulo;
   final VoidCallback? aoTocar;
+
+  /// Como no [BotaoPrincipal]: enquanto envia, o botão fica desabilitado e
+  /// mostra o indicador — "Cancelando…" —, e o segundo toque não faz pedido.
+  final bool enviando;
+  final String? rotuloEnviando;
 
   @override
   Widget build(BuildContext context) {
@@ -73,8 +84,8 @@ class BotaoDestrutivo extends StatelessWidget {
           foregroundColor: cores.error,
           side: BorderSide(color: cores.error, width: 1.5),
         ),
-        onPressed: aoTocar,
-        child: Text(rotulo, textAlign: TextAlign.center),
+        onPressed: enviando ? null : aoTocar,
+        child: _Conteudo(rotulo: rotulo, enviando: enviando, rotuloEnviando: rotuloEnviando),
       ),
     );
   }

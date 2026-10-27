@@ -1,7 +1,9 @@
 import 'package:agendamento_clinico/domain/models/clinica.dart';
+import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
+import 'package:agendamento_clinico/ui/consultas/situacao_da_consulta.dart';
 
 // A agenda de teste da grade, do resumo e do pagamento: um profissional, a
 // clínica dele e horários ditos no relógio da clínica.
@@ -33,3 +35,29 @@ Horario horario(int id, int dia, int hora, {int minuto = 0, int mes = 10, int an
       duracaoMinutos: 30,
       versao: versao,
     );
+
+/// Uma consulta como a lista e o detalhe da API a trazem: com o horário e o
+/// profissional dentro.
+Consulta consultaNa(
+  Horario horario, {
+  int id = 50,
+  StatusDaConsulta status = StatusDaConsulta.confirmada,
+  MotivoDoCancelamento? motivo,
+  DateTime? expiraEm,
+  Profissional? profissional,
+}) =>
+    Consulta(
+      id: id,
+      status: status,
+      motivoDoCancelamento: motivo,
+      horarioId: horario.id,
+      valorFormatado: 'R\$ 250,00',
+      reservaExpiraEm: expiraEm,
+      horario: horario,
+      profissional: profissional ?? timbo,
+    );
+
+/// O item da lista que as telas usam, a partir de uma consulta com o horário
+/// e o profissional.
+ConsultaNaLista itemDe(Consulta consulta) =>
+    (consulta: consulta, horario: consulta.horario!, profissional: consulta.profissional!);

@@ -170,6 +170,18 @@ ThemeData temaDoApp() {
     snackBarTheme: SnackBarThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
+    // A barra de baixo tem quatro abas, e "Minhas consultas" é o rótulo mais
+    // longo: com a fonte de 13, ele quebrava em duas linhas num aparelho de
+    // 411 dp e subia o próprio ícone. A 12, cabe numa linha. As cores são as
+    // do Material, a escolhida mais forte.
+    navigationBarTheme: NavigationBarThemeData(
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (estados) => base.textTheme.labelSmall!.copyWith(
+          color: _escolhido(estados) ? esquema.onSurface : esquema.onSurfaceVariant,
+          fontWeight: _escolhido(estados) ? FontWeight.w700 : FontWeight.w600,
+        ),
+      ),
+    ),
     chipTheme: ChipThemeData(
       shape: capsula,
       // 48 dp à vista, como os botões, e não só na área que responde ao dedo:

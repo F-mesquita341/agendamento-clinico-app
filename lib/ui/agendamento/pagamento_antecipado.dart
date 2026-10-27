@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../comum/botoes.dart';
 import '../comum/espaco.dart';
+import '../consultas/regras_de_cancelamento.dart';
 
 /// Quantos minutos a reserva espera o pagamento: o `RESERVA_MINUTOS` da API,
 /// 15 em produção. A API só diz o prazo depois de reservar, e o resumo precisa
@@ -47,10 +48,9 @@ class PagamentoAntecipado extends StatelessWidget {
   }
 }
 
-/// A explicação inteira, numa folha por cima da tela.
-///
-/// Falta o que acontece com o valor se a pessoa faltar ou cancelar: depende da
-/// decisão sobre o estorno, que ainda não foi tomada (checklist, item 10.1).
+/// A explicação inteira, numa folha por cima da tela: por que o pagamento é
+/// antecipado, a reserva, e o que acontece com o valor se a pessoa cancelar ou
+/// faltar (checklist, item 10.1).
 Future<void> explicarPagamentoAntecipado(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -82,6 +82,7 @@ Future<void> explicarPagamentoAntecipado(BuildContext context) {
                 'Se o pagamento não for confirmado nesse prazo, a reserva expira e o horário volta a ficar livre.',
                 style: texto,
               ),
+              Text(RegraDoCancelamento.devolucao, style: texto),
               Text('Nesta versão de teste, nenhum valor real é cobrado.', style: texto),
               BotaoPrincipal(rotulo: 'Entendi', aoTocar: () => Navigator.of(contexto).pop()),
             ],
