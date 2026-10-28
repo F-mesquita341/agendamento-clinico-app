@@ -28,6 +28,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- O lembrete de consulta: a API não manda canal, ícone nem cor, e o
+             FCM usa estes. O canal é criado pela MainActivity. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="lembretes" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notificacao" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/cor_da_notificacao" />
+        <!-- O token do aparelho só nasce quando o aplicativo o pede, e o
+             aplicativo só pede com a permissão de notificações dada (termo,
+             v2): sem isto, o FCM o criaria a cada abertura. -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

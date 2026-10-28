@@ -6,6 +6,14 @@ import '../../domain/models/profissional.dart';
 /// lista e o detalhe da API sempre trazem.
 typedef ConsultaNaLista = ({Consulta consulta, Horario horario, Profissional profissional});
 
+/// A consulta como as telas a mostram, se ela veio com o horário e o
+/// profissional; senão, null.
+ConsultaNaLista? naLista(Consulta consulta) => switch (consulta) {
+      Consulta(horario: final horario?, profissional: final profissional?) =>
+        (consulta: consulta, horario: horario, profissional: profissional),
+      _ => null,
+    };
+
 /// O que a tela pode dizer e oferecer sobre uma consulta.
 ///
 /// O status é sempre o que a API deu: nada aqui deduz pagamento (checklist,

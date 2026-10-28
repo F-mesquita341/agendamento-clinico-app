@@ -22,11 +22,19 @@ class SessaoViewModel extends ChangeNotifier {
     required ServicoDeAutenticacao autenticacao,
     required RepositorioDoPaciente pacientes,
     this.esperaAteAvisar = const Duration(seconds: 4),
+    Future<void> Function()? antesDeSair,
   })  : _autenticacao = autenticacao,
-        _pacientes = pacientes;
+        _pacientes = pacientes,
+        _antesDeSair = antesDeSair;
 
   final ServicoDeAutenticacao _autenticacao;
   final RepositorioDoPaciente _pacientes;
+
+  /// O que precisa acontecer enquanto o token da conta ainda vale, antes de
+  /// sair do provedor — tirar o aparelho dos lembretes. Quem o faz põe o
+  /// próprio teto de espera.
+  final Future<void> Function()? _antesDeSair;
+  bool _saindo = false;
 
   /// Depois deste tempo carregando o perfil, a tela avisa que o servidor está
   /// demorando — o mesmo aviso da Etapa 11.
@@ -58,6 +66,10 @@ class SessaoViewModel extends ChangeNotifier {
 
   /// Por que a sessão terminou sem a pessoa pedir — a tela de entrar mostra.
   String? get motivoDaSaida => _motivoDaSaida;
+
+  /// "Sair da conta" está no ar: o botão trava, e um segundo toque não faz
+  /// outro pedido.
+  bool get saindo => _saindo;
 
   void iniciar() {
     _inscricao ??= _autenticacao.mudancas.listen(
@@ -121,8 +133,23 @@ class SessaoViewModel extends ChangeNotifier {
 
   /// A pessoa pediu para sair.
   Future<void> sair() async {
-    _motivoDaSaida = null;
+    if (_saindo) return;
+    _saindo = true;
+    _notificar();
+    try {
+      await _antesDeSair?.call();
+    } catch (erro, pilha) {
+      relatarDefeito(erro, pilha, 'antes de sair da conta');
+    }
+    // Só agora: se o pedido de antes de sair descobriu a sessão já perdida, o
+    // aviso de "sessão encerrada" não fica para quem saiu por vontade própria.
+    if (_motivoDaSaida != null) {
+      _motivoDaSaida = null;
+      _notificar();
+    }
     await _sairDoProvedor();
+    _saindo = false;
+    _notificar();
   }
 
   /// A sessão deixou de valer — a API ou o provedor disseram `autenticar`.

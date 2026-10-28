@@ -97,7 +97,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
             _vm.confirmada!,
             profissionalDeAntes: _vm.profissional,
             horarioDeAntes: _vm.horario,
-            hoje: _vm.hoje,
+            agora: _vm.relogio(),
           ),
           (rota) => rota.isFirst,
         ));

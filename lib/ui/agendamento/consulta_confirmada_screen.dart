@@ -10,8 +10,10 @@ import '../../domain/models/profissional.dart';
 import '../comum/botoes.dart';
 import '../comum/datas.dart';
 import '../comum/espaco.dart';
+import '../comum/nota.dart';
 import '../comum/retorno.dart';
 import '../comum/selo_de_status.dart';
+import '../lembretes/lembretes_view_model.dart';
 import '../shell/abas_do_shell.dart';
 import 'cartao_da_consulta.dart';
 
@@ -25,14 +27,14 @@ Route<void> rotaDaConsultaConfirmada(
   Consulta consulta, {
   required Profissional profissionalDeAntes,
   required Horario horarioDeAntes,
-  required DataCivil hoje,
+  required DateTime agora,
 }) {
   return MaterialPageRoute<void>(
     builder: (_) => ConsultaConfirmadaScreen(
       consulta: consulta,
       profissional: consulta.profissional ?? profissionalDeAntes,
       horario: consulta.horario ?? horarioDeAntes,
-      hoje: hoje,
+      agora: agora,
     ),
   );
 }
@@ -45,13 +47,16 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
     required this.consulta,
     required this.profissional,
     required this.horario,
-    required this.hoje,
+    required this.agora,
   });
 
   final Consulta consulta;
   final Profissional profissional;
   final Horario horario;
-  final DataCivil hoje;
+
+  /// A hora da confirmação, no relógio do aparelho: o dia de hoje, para dizer
+  /// "amanhã", e quanto falta, para a nota do lembrete.
+  final DateTime agora;
 
   Future<void> _abrirNoMapa(BuildContext context, String lugar, String endereco) async {
     final abriu = await context.read<AbridorDeLinks>().abrirNoMapa(lugar);
@@ -67,6 +72,12 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
     final clinica = profissional.clinica;
     final endereco = clinica?.endereco;
     final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final hoje = DataCivil.naClinica(agora);
+    final lembretesPermitidos = context.select<LembretesViewModel, bool?>((l) => l.permitidas);
+    // A API manda o lembrete na primeira rodada dentro das 24 h antes da
+    // consulta. Mais perto que isso, ele sai em minutos, e "um dia antes"
+    // seria falso: a nota não aparece.
+    final lembreteUmDiaAntes = horario.inicio.difference(agora) > const Duration(hours: 24);
 
     final conteudo = [
       Center(
@@ -108,6 +119,16 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
         valorFormatado: consulta.valorFormatado,
         hoje: hoje,
       ),
+      // Logo depois do cartão, como no modelo: o que acontece até a consulta.
+      if (lembreteUmDiaAntes && lembretesPermitidos != null) ...[
+        const SizedBox(height: Espaco.medio),
+        Nota(
+          icone: Icons.notifications_outlined,
+          texto: lembretesPermitidos
+              ? 'Você recebe um lembrete um dia antes da consulta.'
+              : 'Os lembretes estão desativados. Para receber o aviso um dia antes, ative em Perfil.',
+        ),
+      ],
       if (clinica != null && endereco != null) ...[
         const SizedBox(height: Espaco.pequeno),
         Align(

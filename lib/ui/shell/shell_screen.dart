@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_de_consultas.dart';
 import '../../data/repositories/repositorio_do_catalogo.dart';
+import '../../data/services/servico_de_notificacoes.dart';
 import '../../domain/models/profissional.dart';
 import '../busca/busca_screen.dart';
 import '../busca/busca_view_model.dart';
+import '../comum/retorno.dart';
 import '../consultas/consultas_view_model.dart';
 import '../consultas/minhas_consultas_screen.dart';
 import '../inicio/inicio_screen.dart';
+import '../lembretes/consulta_do_lembrete_screen.dart';
+import '../lembretes/lembretes_view_model.dart';
 import '../perfil/perfil_screen.dart';
 import '../profissional/profissional_screen.dart';
 import 'abas_do_shell.dart';
@@ -31,6 +37,8 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> with RouteAware {
   late final BuscaViewModel _busca;
   late final ConsultasViewModel _consultas;
+  late final LembretesViewModel _lembretes;
+  late final StreamSubscription<LembreteRecebido> _comOAppAberto;
   RouteObserver<PageRoute<dynamic>>? _rotas;
 
   @override
@@ -39,6 +47,44 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
     context.read<AbasDoShell>().recomecar();
     _busca = BuscaViewModel(context.read<RepositorioDoCatalogo>())..carregar();
     _consultas = ConsultasViewModel(context.read<RepositorioDeConsultas>())..carregar();
+    _lembretes = context.read<LembretesViewModel>()..addListener(_aoMudarLembretes);
+    _comOAppAberto = _lembretes.recebidosComOAppAberto.listen(_mostrarLembrete);
+    // O toque que abriu o aplicativo — ou que chegou antes de a conta abrir —
+    // espera o shell: é ele que sabe abrir a consulta.
+    _atenderToqueDepoisDoQuadro();
+  }
+
+  void _aoMudarLembretes() {
+    if (_lembretes.toquePendente != null) _atenderToqueDepoisDoQuadro();
+  }
+
+  void _atenderToqueDepoisDoQuadro() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_lembretes.consumirToque() case final lembrete?) _abrirLembrete(lembrete.consultaId);
+    });
+  }
+
+  /// O toque no lembrete abre a consulta (checklist, item 7.2) a partir do
+  /// Início: o que estava aberto fecha, e voltar dos detalhes leva ao Início,
+  /// como no modelo. Uma reserva deixada no pagamento continua lá, com "Pagar
+  /// agora".
+  void _abrirLembrete(int consultaId) {
+    context.read<AbasDoShell>().mostrar(AbaDoShell.inicio);
+    final navegador = Navigator.of(context)..popUntil((rota) => rota.isFirst);
+    unawaited(navegador.push(rotaDoLembrete(consultaId)));
+  }
+
+  /// Com o aplicativo aberto, o Android não mostra o lembrete na bandeja: ele
+  /// aparece aqui, com o texto da API, e "Ver" abre a consulta.
+  void _mostrarLembrete(LembreteRecebido lembrete) {
+    if (!mounted) return;
+    mostrarRetorno(
+      context,
+      TipoDeRetorno.aviso,
+      lembrete.texto ?? 'Você tem uma consulta chegando.',
+      acao: (rotulo: 'Ver', aoTocar: () => _abrirLembrete(lembrete.consultaId)),
+    );
   }
 
   @override
@@ -65,6 +111,8 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
 
   @override
   void dispose() {
+    _lembretes.removeListener(_aoMudarLembretes);
+    unawaited(_comOAppAberto.cancel());
     _rotas?.unsubscribe(this);
     _busca.dispose();
     _consultas.dispose();

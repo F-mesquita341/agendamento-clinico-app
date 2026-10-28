@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.dart';
+import 'package:agendamento_clinico/data/repositories/repositorio_de_dispositivos.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_consentimento.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
+import 'package:agendamento_clinico/data/services/servico_de_notificacoes.dart';
 import 'package:agendamento_clinico/domain/models/checkout.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
@@ -264,6 +266,124 @@ class AbridorDeLinksFalso implements AbridorDeLinks {
     return consegue;
   }
 }
+
+/// As notificações do aparelho em memória. Sem nada dito, como numa
+/// instalação nova no Android 13: sem a permissão, e a pergunta do sistema
+/// respondida com "Não permitir".
+class NotificacoesFalsas implements ServicoDeNotificacoes {
+  NotificacoesFalsas({this.permitido = false, this.concede = false, this.toqueInicial});
+
+  /// O que o sistema diz agora. O teste muda no meio, como a pessoa nas
+  /// configurações do Android.
+  bool permitido;
+
+  /// A resposta à pergunta do sistema.
+  bool concede;
+
+  /// Se preenchidos, a leitura da permissão e a pergunta ficam no ar até o
+  /// teste completá-los.
+  Completer<bool>? leituraNoAr;
+  Completer<bool>? perguntaNoAr;
+
+  String tokenAtual = 'token-fcm-de-teste';
+
+  /// Se preenchidos, `permitidas` e `token` lançam estes erros.
+  Object? erroDaPermissao;
+  Object? erroDoToken;
+
+  LembreteRecebido? toqueInicial;
+
+  int leiturasDaPermissao = 0;
+  int perguntas = 0;
+  int pedidosDeToken = 0;
+  int tokensApagados = 0;
+  int leiturasDoToqueInicial = 0;
+
+  final _tocados = StreamController<LembreteRecebido>.broadcast();
+  final _comOAppAberto = StreamController<LembreteRecebido>.broadcast();
+
+  /// A pessoa toca no lembrete, com o aplicativo em segundo plano.
+  void tocar(LembreteRecebido lembrete) => _tocados.add(lembrete);
+
+  /// Um lembrete chega com o aplicativo aberto.
+  void chegarComOAppAberto(LembreteRecebido lembrete) => _comOAppAberto.add(lembrete);
+
+  @override
+  Future<bool> permitidas() async {
+    leiturasDaPermissao++;
+    if (erroDaPermissao case final erro?) throw erro;
+    final leitura = leituraNoAr;
+    if (leitura != null) {
+      leituraNoAr = null;
+      return leitura.future;
+    }
+    return permitido;
+  }
+
+  @override
+  Future<bool> pedirPermissao() async {
+    perguntas++;
+    final pergunta = perguntaNoAr;
+    perguntaNoAr = null;
+    final resposta = pergunta == null ? concede : await pergunta.future;
+    if (resposta) permitido = true;
+    return resposta;
+  }
+
+  @override
+  Future<String> token() async {
+    pedidosDeToken++;
+    if (erroDoToken case final erro?) throw erro;
+    return tokenAtual;
+  }
+
+  @override
+  Future<void> apagarToken() async => tokensApagados++;
+
+  @override
+  Future<LembreteRecebido?> lembreteQueAbriuOApp() async {
+    leiturasDoToqueInicial++;
+    return toqueInicial;
+  }
+
+  @override
+  Stream<LembreteRecebido> get lembretesTocados => _tocados.stream;
+
+  @override
+  Stream<LembreteRecebido> get lembretesComOAppAberto => _comOAppAberto.stream;
+}
+
+/// Os aparelhos na API em memória, com uma fila de respostas para registrar
+/// e outra para revogar, e o registro do que foi pedido.
+class DispositivosFalso implements RepositorioDeDispositivos {
+  DispositivosFalso({Iterable<Object?> registrar = const [], Iterable<Object?> revogar = const []})
+      : respostasDeRegistrar = Fila(registrar),
+        respostasDeRevogar = Fila(revogar);
+
+  final Fila respostasDeRegistrar;
+  final Fila respostasDeRevogar;
+  final registros = <String>[];
+  final revogacoes = <int>[];
+
+  @override
+  Future<int> registrar(String token) {
+    registros.add(token);
+    return respostasDeRegistrar.proxima<int>();
+  }
+
+  @override
+  Future<void> revogar(int id) {
+    revogacoes.add(id);
+    return respostasDeRevogar.proxima<void>();
+  }
+}
+
+/// Um lembrete da consulta [consultaId], como a API o envia.
+LembreteRecebido lembreteDaConsulta(int consultaId, {String? messageId, String? texto}) => LembreteRecebido(
+      consultaId: consultaId,
+      messageId: messageId ?? 'mensagem-$consultaId',
+      texto: texto ?? 'Você tem uma consulta amanhã às 14:30.',
+    );
 
 /// Uma página de profissionais; sem mais nada dito, a única.
 Pagina<Profissional> paginaDe(List<Profissional> itens, {int pagina = 1, int paginas = 1, int? total}) =>

@@ -209,11 +209,8 @@ class ConsultasViewModel extends ChangeNotifier {
 
   /// O repositório garante o horário e o profissional em cada consulta da
   /// lista; sem eles, é defeito.
-  static ConsultaNaLista _naLista(Consulta consulta) => switch (consulta) {
-        Consulta(horario: final horario?, profissional: final profissional?) =>
-          (consulta: consulta, horario: horario, profissional: profissional),
-        _ => throw StateError('Consulta ${consulta.id} sem o horário ou sem o profissional.'),
-      };
+  static ConsultaNaLista _naLista(Consulta consulta) =>
+      naLista(consulta) ?? (throw StateError('Consulta ${consulta.id} sem o horário ou sem o profissional.'));
 
   /// Uma consulta pode vir em duas páginas — uma reserva feita em outro lugar
   /// empurra a lista entre um pedido e outro. Fica a primeira vez.

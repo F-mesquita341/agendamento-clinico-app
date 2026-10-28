@@ -13,6 +13,8 @@ import 'package:agendamento_clinico/ui/agendamento/pagamento_screen.dart';
 import 'package:agendamento_clinico/ui/agendamento/reserva_view_model.dart';
 import 'package:agendamento_clinico/ui/comum/selo_de_status.dart';
 import 'package:agendamento_clinico/ui/comum/textos.dart';
+import 'package:agendamento_clinico/ui/lembretes/lembretes_view_model.dart';
+import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:agendamento_clinico/ui/shell/abas_do_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -182,6 +184,7 @@ void main() {
       double altura = 1400,
       bool reaberta = false,
       List<Object?> cancelar = const [],
+      bool lembretesPermitidos = true,
     }) async {
       // Alta, para a tela inteira caber sem rolar; o teste a 200% rola.
       tester.view.physicalSize = Size(411, altura);
@@ -193,12 +196,22 @@ void main() {
       abas = AbasDoShell()..mostrar(AbaDoShell.buscar);
       addTearDown(abas.dispose);
       abridor = AbridorDeLinksFalso(consegue: abre);
+      // Os lembretes, só pela permissão: a nota da confirmação depende dela.
+      final sessao = SessaoViewModel(autenticacao: AutenticacaoFalsa(), pacientes: RepositorioDoPacienteFalso());
+      addTearDown(sessao.dispose);
+      final lembretes = LembretesViewModel(
+        notificacoes: NotificacoesFalsas(permitido: lembretesPermitidos),
+        dispositivos: DispositivosFalso(),
+        sessao: sessao,
+      )..iniciar();
+      addTearDown(lembretes.dispose);
       await tester.pumpWidget(MultiProvider(
         providers: [
           Provider<RepositorioDoCatalogo>.value(value: catalogo),
           Provider<RepositorioDeConsultas>.value(value: consultas),
           Provider<AbridorDeLinks>.value(value: abridor),
           ChangeNotifierProvider<AbasDoShell>.value(value: abas),
+          ChangeNotifierProvider<LembretesViewModel>.value(value: lembretes),
         ],
         child: MaterialApp(
           theme: temaDoApp(),
@@ -796,6 +809,59 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Ir ao pagamento'), findsOneWidget);
       expect(abas.aba, AbaDoShell.consultas);
+    });
+
+    group('na confirmação, a nota do lembrete', () {
+      const umDiaAntes = 'Você recebe um lembrete um dia antes da consulta.';
+      const desativados = 'Os lembretes estão desativados. Para receber o aviso um dia antes, ative em Perfil.';
+
+      /// A consulta paga, num horário que começa [daquiA] depois do meio-dia
+      /// de quarta, quando a confirmação chega.
+      Consulta pagaPara(Duration daquiA) {
+        final inicio = meioDiaDeQuarta.add(daquiA);
+        final outro = Horario(id: 9, inicio: inicio, duracaoMinutos: 30, versao: 0);
+        return Consulta(
+          id: 50,
+          status: StatusDaConsulta.confirmada,
+          horarioId: outro.id,
+          valorFormatado: 'R\$ 200,00',
+          horario: outro,
+          profissional: timbo,
+        );
+      }
+
+      Future<void> confirmar(WidgetTester tester, Consulta lida, {bool permitidos = true}) async {
+        await abrir(tester, reserva(), pagar: [checkout], lidas: [lida], lembretesPermitidos: permitidos);
+        await tocarEmAbrir(tester);
+        await voltarAoApp(tester);
+        await tester.pumpAndSettle();
+        expect(find.text('Consulta confirmada'), findsOneWidget);
+      }
+
+      testWidgets('com os lembretes permitidos: um dia antes', (tester) async {
+        await confirmar(tester, paga);
+
+        expect(find.text(umDiaAntes), findsOneWidget);
+      });
+
+      testWidgets('sem a permissão: os lembretes desativados, e onde ativar', (tester) async {
+        await confirmar(tester, paga, permitidos: false);
+
+        expect(find.text(desativados), findsOneWidget);
+        expect(find.text(umDiaAntes), findsNothing);
+      });
+
+      testWidgets('com 24 h ou menos até a consulta, não aparece: o lembrete sai em minutos', (tester) async {
+        await confirmar(tester, pagaPara(const Duration(hours: 24)));
+
+        expect(find.text(umDiaAntes), findsNothing);
+      });
+
+      testWidgets('com um minuto a mais que 24 h, aparece', (tester) async {
+        await confirmar(tester, pagaPara(const Duration(hours: 24, minutes: 1)));
+
+        expect(find.text(umDiaAntes), findsOneWidget);
+      });
     });
 
     testWidgets('na confirmação, "Voltar ao início" leva ao Início', (tester) async {

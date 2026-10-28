@@ -11,6 +11,8 @@ import '../comum/estados_de_carga.dart';
 import '../comum/marca.dart';
 import '../conta/abertura_screen.dart';
 import '../conta/entrar_screen.dart';
+import '../lembretes/lembretes_screen.dart';
+import '../lembretes/lembretes_view_model.dart';
 import '../shell/shell_screen.dart';
 import '../termo/termo_screen.dart';
 import '../termo/termo_view_model.dart';
@@ -25,7 +27,8 @@ enum _Area { transicao, entrada, cadastro, aplicativo }
 ///   sem sessão ............ a abertura (e dali, criar conta ou entrar); ou
 ///                           entrar direto, quando a sessão se perdeu
 ///   com sessão, sem perfil  termo, e então completar o cadastro
-///   com sessão e perfil ... o aplicativo
+///   com sessão e perfil ... o aplicativo — logo depois do cadastro, a
+///                           explicação do lembrete antes dele
 ///
 /// Quando a área muda, as telas abertas por cima são fechadas: depois de
 /// cadastrar, voltar não leva ao formulário; depois de sair, não leva ao
@@ -96,6 +99,7 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
   @override
   Widget build(BuildContext context) {
     final sessao = context.watch<SessaoViewModel>();
+    final explicacao = context.select<LembretesViewModel, ExplicacaoDosLembretes>((l) => l.explicacao);
     return switch (sessao.estado) {
       EstadoDaSessao.iniciando => const _Iniciando(),
       EstadoDaSessao.carregandoPerfil => _Transicao(child: IndicadorDeCarga(demorando: sessao.demorando)),
@@ -126,7 +130,13 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
             ),
           ),
         ),
-      EstadoDaSessao.comPerfil => ShellScreen(lerArquivo: widget.lerArquivo),
+      // Logo depois do cadastro, a explicação do lembrete vem antes do
+      // aplicativo — na mesma área: trocar uma pela outra não fecha nada.
+      EstadoDaSessao.comPerfil => switch (explicacao) {
+          ExplicacaoDosLembretes.mostrar => const LembretesScreen(),
+          ExplicacaoDosLembretes.decidindo => const _Transicao(child: IndicadorDeCarga(demorando: false)),
+          ExplicacaoDosLembretes.nenhuma => ShellScreen(lerArquivo: widget.lerArquivo),
+        },
     };
   }
 }

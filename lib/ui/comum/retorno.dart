@@ -9,7 +9,16 @@ import 'espaco.dart';
 enum TipoDeRetorno { sucesso, aviso, erro }
 
 /// Retorno passageiro, embaixo da tela: "Dados salvos", "Enviamos o e-mail".
-void mostrarRetorno(BuildContext context, TipoDeRetorno tipo, String texto) {
+///
+/// Com [acao] — o "Ver" do lembrete que chega com o aplicativo aberto —, fica
+/// mais tempo, e some sozinho assim mesmo: no Flutter, um retorno com ação
+/// fica na tela até alguém fechá-lo, a menos que se diga o contrário.
+void mostrarRetorno(
+  BuildContext context,
+  TipoDeRetorno tipo,
+  String texto, {
+  ({String rotulo, VoidCallback aoTocar})? acao,
+}) {
   final estilo = _EstiloDoRetorno.de(context, tipo);
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
@@ -17,6 +26,11 @@ void mostrarRetorno(BuildContext context, TipoDeRetorno tipo, String texto) {
       behavior: SnackBarBehavior.floating,
       backgroundColor: estilo.fundo,
       content: _Linha(estilo: estilo, texto: texto),
+      action: acao == null
+          ? null
+          : SnackBarAction(label: acao.rotulo, textColor: estilo.frente, onPressed: acao.aoTocar),
+      duration: acao == null ? const Duration(milliseconds: 4000) : const Duration(seconds: 10),
+      persist: false,
     ));
 }
 
