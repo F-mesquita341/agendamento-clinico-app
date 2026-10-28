@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
@@ -5,6 +6,8 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.da
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
 import 'package:agendamento_clinico/main.dart';
+import 'package:agendamento_clinico/ui/lembretes/lembretes_screen.dart';
+import 'package:agendamento_clinico/ui/lembretes/lembretes_view_model.dart';
 import 'package:agendamento_clinico/ui/sessao/portao_da_sessao.dart';
 import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +20,7 @@ import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:agendamento_clinico/ui/conta/criar_conta_screen.dart';
 import 'package:agendamento_clinico/ui/conta/entrar_screen.dart';
 import 'package:agendamento_clinico/ui/conta/esqueci_a_senha_screen.dart';
+import 'package:agendamento_clinico/ui/consultas/detalhes_da_consulta_screen.dart';
 import 'package:agendamento_clinico/ui/inicio/inicio_screen.dart';
 import 'package:agendamento_clinico/ui/perfil/perfil_screen.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
@@ -74,6 +78,10 @@ class ApiFalsa {
   /// Respostas forçadas, por "MÉTODO /caminho", consumidas uma vez.
   final forcadas = <String, http.Response>{};
 
+  /// Pedidos segurados, por "MÉTODO /caminho": a resposta só sai quando o
+  /// teste completar a espera — o servidor demorando.
+  final esperas = <String, Completer<void>>{};
+
   Map<String, Object?> perfil({String nome = 'Ana Lima'}) => {
         'paciente': {
           'id': 7,
@@ -111,6 +119,7 @@ class ApiFalsa {
   late final cliente = MockClient((pedido) async {
     pedidos.add(pedido);
     final rota = '${pedido.method} ${pedido.url.path}';
+    if (esperas.remove(rota) case final espera?) await espera.future;
     if (forcadas.remove(rota) case final resposta?) return resposta;
     return switch (rota) {
       'GET /especialidades' => json(200, {
@@ -165,6 +174,11 @@ class ApiFalsa {
           motivoDaConsulta = 'paciente';
           return json(200, {'consulta': consulta90(completa: false)});
         }(),
+      // O aparelho, nos lembretes: o mesmo token, o mesmo id.
+      'POST /dispositivos' => json(201, {
+          'dispositivo': {'id': 12},
+        }),
+      'DELETE /dispositivos/12' => http.Response('', 204),
       _ => json(404, erro('ROTA_NAO_ENCONTRADA', 'Não existe $rota nesta API.')),
     };
   });
@@ -201,12 +215,15 @@ Future<void> montar(
   AutenticacaoFalsa autenticacao,
   ApiFalsa api, {
   AbridorDeLinksFalso? abridor,
+  NotificacoesFalsas? notificacoes,
 }) async {
   await tester.pumpWidget(AplicativoDoPaciente(
     autenticacao: autenticacao,
     cliente: api.cliente,
     base: Uri.parse('https://api.exemplo.test'),
     abridor: abridor ?? AbridorDeLinksFalso(),
+    // Sem nada dito, como numa instalação nova no Android 13: sem a permissão.
+    notificacoes: notificacoes ?? NotificacoesFalsas(),
     lerArquivo: lerDoDisco,
   ));
   await tester.pump();
@@ -307,6 +324,10 @@ void main() {
     await tocar(tester, 'Concluir cadastro');
     final cadastro = jsonDecode(api.pedidosA('POST', '/pacientes').single.body) as Map<String, Object?>;
     expect(cadastro['consentimento'], {'aceito': true, 'versao': '2026-09-v2'});
+
+    // Sem a permissão de notificações, a explicação do lembrete vem antes.
+    expect(find.byType(LembretesScreen), findsOneWidget);
+    await tocar(tester, 'Agora não');
 
     // O aplicativo, sem caminho de volta para o formulário ou o termo.
     expect(find.byType(ShellScreen), findsOneWidget);
@@ -413,6 +434,9 @@ void main() {
     final pacientes = RepositorioDoPacienteFalso(meu: [const ErroDaApi.semConexao()]);
     final vm = SessaoViewModel(autenticacao: autenticacao, pacientes: pacientes)..iniciar();
     addTearDown(vm.dispose);
+    final lembretes = LembretesViewModel(notificacoes: NotificacoesFalsas(), dispositivos: DispositivosFalso(), sessao: vm)
+      ..iniciar();
+    addTearDown(lembretes.dispose);
     // A sessão já sabe que não há ninguém antes de o portão existir.
     autenticacao.emitir(null);
     await tester.pump();
@@ -422,6 +446,7 @@ void main() {
         Provider<ServicoDeAutenticacao>.value(value: autenticacao),
         Provider<RepositorioDoPaciente>.value(value: pacientes),
         ChangeNotifierProvider<SessaoViewModel>.value(value: vm),
+        ChangeNotifierProvider<LembretesViewModel>.value(value: lembretes),
       ],
       child: const MaterialApp(home: PortaoDaSessao(lerArquivo: lerDoDisco)),
     ));
@@ -984,5 +1009,377 @@ void main() {
     await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
     await expectLater(tester, meetsGuideline(textContrastGuideline));
     semantica.dispose();
+  });
+
+  group('lembretes', () {
+    /// Do termo ao fim do cadastro, numa conta nova.
+    Future<void> cadastrar(WidgetTester tester, AutenticacaoFalsa autenticacao) async {
+      await sessao(tester, autenticacao, ana);
+      await tester.scrollUntilVisible(find.byType(CheckboxListTile), 300, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pump();
+      await tocar(tester, 'Continuar');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Nome completo'), 'Ana Lima');
+      await tester.pump();
+      await tocar(tester, 'Concluir cadastro');
+    }
+
+    /// O grupo dos lembretes fica mais abaixo no Perfil, e a lista só constrói
+    /// o que está perto da tela: rola até o texto antes de conferir.
+    Future<void> rolarAte(WidgetTester tester, String texto) =>
+        tester.scrollUntilVisible(find.text(texto), 200, scrollable: find.byType(Scrollable).first);
+
+    /// A consulta 90, confirmada, para amanhã às 14:30.
+    ApiFalsa comConsultaConfirmada() => ApiFalsa(temPerfil: true)
+      ..horarioReservado = 43
+      ..statusDaConsulta = 'confirmada';
+
+    group('a explicação, depois do cadastro', () {
+      testWidgets('"Ativar lembretes" e "Permitir": o aparelho registrado, e o aplicativo', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa();
+        final notificacoes = NotificacoesFalsas(concede: true);
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await cadastrar(tester, autenticacao);
+
+        expect(find.text('Quer receber um lembrete?'), findsOneWidget);
+        expect(find.textContaining('não mostra o profissional nem a especialidade'), findsOneWidget);
+        // Antes da pergunta do sistema, nada: a explicação vem primeiro.
+        expect(notificacoes.perguntas, 0);
+        expect(api.pedidosA('POST', '/dispositivos'), isEmpty);
+        await tocar(tester, 'Ativar lembretes');
+
+        expect(notificacoes.perguntas, 1);
+        final registro = api.pedidosA('POST', '/dispositivos').single;
+        expect(jsonDecode(registro.body), {'token': 'token-fcm-de-teste', 'plataforma': 'android'});
+        expect(registro.headers['Authorization'], 'Bearer token-de-teste');
+        expect(find.byType(ShellScreen), findsOneWidget);
+        expect(find.text('Lembretes ativados.'), findsOneWidget);
+        await abrirAba(tester, 'Perfil');
+        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+      });
+
+      testWidgets('"Não permitir": onde ativar depois, e nada vai para a API', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa();
+        await montar(tester, autenticacao, api);
+        await cadastrar(tester, autenticacao);
+
+        await tocar(tester, 'Ativar lembretes');
+
+        expect(find.byType(ShellScreen), findsOneWidget);
+        expect(find.text('Os lembretes ficaram desativados. Você pode ativar em Perfil.'), findsOneWidget);
+        expect(api.pedidosA('POST', '/dispositivos'), isEmpty);
+        await abrirAba(tester, 'Perfil');
+        await rolarAte(tester, 'Desativados');
+        expect(find.text('Ativar lembretes'), findsOneWidget);
+      });
+
+      testWidgets('permitido, mas o registro falha: o aviso diz que o aplicativo tenta de novo', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa();
+        api.forcadas['POST /dispositivos'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        await montar(tester, autenticacao, api, notificacoes: NotificacoesFalsas(concede: true));
+        await cadastrar(tester, autenticacao);
+
+        await tocar(tester, 'Ativar lembretes');
+
+        expect(find.byType(ShellScreen), findsOneWidget);
+        expect(
+          find.text('Não foi possível ativar os lembretes agora. O aplicativo tenta de novo quando você voltar.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('a permissão ainda não lida quando o cadastro acaba: a espera, sem o aplicativo piscar antes', (
+        tester,
+      ) async {
+        final autenticacao = AutenticacaoFalsa();
+        final leitura = Completer<bool>();
+        await montar(tester, autenticacao, ApiFalsa(), notificacoes: NotificacoesFalsas()..leituraNoAr = leitura);
+        await sessao(tester, autenticacao, ana);
+        await tester.scrollUntilVisible(find.byType(CheckboxListTile), 300, scrollable: find.byType(Scrollable).first);
+        await tester.tap(find.byType(CheckboxListTile));
+        await tester.pump();
+        await tocar(tester, 'Continuar');
+        await tester.enterText(find.widgetWithText(TextFormField, 'Nome completo'), 'Ana Lima');
+        await tester.pump();
+        // Sem esperar assentar: o indicador de carga gira até a leitura chegar.
+        await tester.tap(find.widgetWithText(FilledButton, 'Concluir cadastro'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.byType(FormularioDoPacienteScreen), findsNothing);
+        expect(find.byType(ShellScreen), findsNothing);
+        expect(find.byType(LembretesScreen), findsNothing);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+        leitura.complete(false);
+        await tester.pumpAndSettle();
+        expect(find.byType(LembretesScreen), findsOneWidget);
+      });
+
+      testWidgets('voltar do Android vale "Agora não", e não fecha o aplicativo', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, ApiFalsa(), notificacoes: notificacoes);
+        await cadastrar(tester, autenticacao);
+        expect(find.byType(LembretesScreen), findsOneWidget);
+
+        final fechou = await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(fechou, isTrue);
+        expect(find.byType(ShellScreen), findsOneWidget);
+        expect(notificacoes.perguntas, 0);
+      });
+
+      testWidgets('a explicação a 200%: nada estoura, e os botões têm nome e tamanho de toque', (tester) async {
+        final semantica = tester.ensureSemantics();
+        final autenticacao = AutenticacaoFalsa();
+        await montar(tester, autenticacao, ApiFalsa());
+        await cadastrar(tester, autenticacao);
+
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpAndSettle();
+        expect(find.byType(LembretesScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.scrollUntilVisible(find.text('Agora não'), 300, scrollable: find.byType(Scrollable).first);
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(textContrastGuideline));
+        semantica.dispose();
+      });
+    });
+
+    group('o toque no lembrete', () {
+      testWidgets('com uma tela aberta por cima: ela fecha, os detalhes abrem, e voltar leva ao Início', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = comConsultaConfirmada();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+        await tocar(tester, 'Ler o termo');
+        expect(find.text('Termo de consentimento para tratamento de dados'), findsOneWidget);
+
+        notificacoes.tocar(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+
+        // O status de agora, lido da API, e não o do envio.
+        expect(api.pedidosA('GET', '/consultas/90'), hasLength(1));
+        expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
+        expect(find.text('Termo de consentimento para tratamento de dados'), findsNothing);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(DetalhesDaConsultaScreen), findsNothing);
+        expect(abaEscolhida(tester), 0);
+        expect(podeVoltar(tester), isFalse);
+      });
+
+      testWidgets('o toque que abriu o aplicativo fechado: a consulta abre assim que a conta abre', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas(toqueInicial: lembreteDaConsulta(90));
+        await montar(tester, autenticacao, comConsultaConfirmada(), notificacoes: notificacoes);
+
+        await sessao(tester, autenticacao, ana);
+
+        expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
+        expect(notificacoes.leiturasDoToqueInicial, 1);
+      });
+
+      testWidgets('um toque sem a conta aberta espera a pessoa entrar', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, comConsultaConfirmada(), notificacoes: notificacoes);
+        await sessao(tester, autenticacao, null);
+
+        notificacoes.tocar(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+        expect(find.byType(AberturaScreen), findsOneWidget);
+
+        await sessao(tester, autenticacao, ana);
+        expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
+      });
+
+      testWidgets('a mesma mensagem entregue de novo não abre a consulta outra vez', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = comConsultaConfirmada();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+        notificacoes.tocar(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        notificacoes.tocar(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DetalhesDaConsultaScreen), findsNothing);
+        expect(api.pedidosA('GET', '/consultas/90'), hasLength(1));
+      });
+
+      testWidgets('a consulta de outra conta: não encontrada, sem nada dela, e "Ver minhas consultas"', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, ApiFalsa(temPerfil: true), notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+
+        notificacoes.tocar(lembreteDaConsulta(77));
+        await tester.pumpAndSettle();
+        expect(find.text('Não encontramos esta consulta nesta conta.'), findsOneWidget);
+
+        await tocar(tester, 'Ver minhas consultas');
+        expect(abaEscolhida(tester), 2);
+        expect(podeVoltar(tester), isFalse);
+      });
+
+      testWidgets('a consulta que não carrega: a mensagem da API e "Tentar de novo"', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = comConsultaConfirmada();
+        final notificacoes = NotificacoesFalsas();
+        api.forcadas['GET /consultas/90'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+
+        notificacoes.tocar(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+        expect(find.text('Algo deu errado do nosso lado.'), findsOneWidget);
+
+        await tocar(tester, 'Tentar de novo');
+        expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
+      });
+    });
+
+    group('com o aplicativo aberto', () {
+      testWidgets('o aviso com o texto da API, e "Ver" abre a consulta', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, comConsultaConfirmada(), notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+
+        notificacoes.chegarComOAppAberto(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+        expect(find.text('Você tem uma consulta amanhã às 14:30.'), findsOneWidget);
+
+        await tester.tap(find.text('Ver'));
+        await tester.pumpAndSettle();
+        expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
+      });
+
+      testWidgets('o aviso some sozinho', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final notificacoes = NotificacoesFalsas();
+        await montar(tester, autenticacao, comConsultaConfirmada(), notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+
+        notificacoes.chegarComOAppAberto(lembreteDaConsulta(90));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 11));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Você tem uma consulta amanhã às 14:30.'), findsNothing);
+      });
+    });
+
+    group('no Perfil', () {
+      testWidgets('"Ativar lembretes" com "Permitir": o aparelho registrado, e ativados', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa(temPerfil: true);
+        await montar(tester, autenticacao, api, notificacoes: NotificacoesFalsas(concede: true));
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+        await rolarAte(tester, 'Desativados');
+
+        await tocar(tester, 'Ativar lembretes');
+
+        expect(api.pedidosA('POST', '/dispositivos'), hasLength(1));
+        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+        expect(find.text('Lembretes ativados.'), findsOneWidget);
+        expect(find.text('Ativar lembretes'), findsNothing);
+      });
+
+      testWidgets('com a pergunta recusada: o diálogo diz onde ativar nas configurações', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+
+        await tocar(tester, 'Ativar lembretes');
+
+        expect(find.text('Os lembretes continuam desativados'), findsOneWidget);
+        expect(find.textContaining('Configurações › Apps › Marcaí › Notificações'), findsOneWidget);
+        await tester.tap(find.text('Entendi'));
+        await tester.pumpAndSettle();
+        expect(find.text('Os lembretes continuam desativados'), findsNothing);
+        await rolarAte(tester, 'Desativados');
+      });
+
+      testWidgets('o registro que falha: "Tentar de novo" registra', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa(temPerfil: true);
+        api.forcadas['POST /dispositivos'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        await montar(tester, autenticacao, api, notificacoes: NotificacoesFalsas(permitido: true));
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+        await rolarAte(tester, 'Não foi possível confirmar os lembretes agora');
+
+        await tocar(tester, 'Tentar de novo');
+
+        expect(api.pedidosA('POST', '/dispositivos'), hasLength(2));
+        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+      });
+
+      testWidgets('sair: "Saindo…" enquanto o aparelho sai da API, e só depois a saída do provedor', (tester) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa(temPerfil: true);
+        final notificacoes = NotificacoesFalsas(permitido: true);
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+        final revogacao = api.esperas['DELETE /dispositivos/12'] = Completer<void>();
+
+        await tocar(tester, 'Sair da conta');
+        await tester.tap(find.widgetWithText(TextButton, 'Sair da conta'));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('Saindo…'), findsOneWidget);
+        expect(api.pedidosA('DELETE', '/dispositivos/12'), hasLength(1));
+        expect(autenticacao.saidas, 0);
+
+        revogacao.complete();
+        await tester.pumpAndSettle();
+        expect(autenticacao.saidas, 1);
+        expect(notificacoes.tokensApagados, greaterThanOrEqualTo(1));
+        expect(find.byType(AberturaScreen), findsOneWidget);
+      });
+
+      testWidgets('de volta ao aplicativo, com a permissão revogada nas configurações: o aparelho sai da API', (
+        tester,
+      ) async {
+        final autenticacao = AutenticacaoFalsa();
+        final api = ApiFalsa(temPerfil: true);
+        final notificacoes = NotificacoesFalsas(permitido: true);
+        await montar(tester, autenticacao, api, notificacoes: notificacoes);
+        await sessao(tester, autenticacao, ana);
+        await abrirAba(tester, 'Perfil');
+        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+
+        notificacoes.permitido = false;
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpAndSettle();
+
+        expect(api.pedidosA('DELETE', '/dispositivos/12'), hasLength(1));
+        await rolarAte(tester, 'Desativados');
+      });
+    });
   });
 }
