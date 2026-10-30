@@ -48,6 +48,8 @@ void main() {
     'retorno de aviso': (retorno.aviso.texto, retorno.aviso.fundo),
     'chip': (textoDoChip({}), fundoDoChip({})),
     'chip escolhido': (textoDoChip(escolhido), fundoDoChip(escolhido)),
+    'texto claro sobre a cor principal (abertura)': (esquema.primaryContainer, esquema.primary),
+    'selo de cancelada': (esquema.onSurface, esquema.surfaceContainerHighest),
   };
 
   for (final MapEntry(key: nome, value: (texto, fundo)) in textos.entries) {
@@ -70,6 +72,7 @@ void main() {
     'ícone de marcado sobre o chip escolhido': (chip.iconTheme!.color!, fundoDoChip(escolhido)),
     // A marca é texto grande, e o "í" dela é a única coisa em âmbar que se lê.
     'âmbar da marca sobre a cor principal': (ambarDaMarca, esquema.primary),
+    'ícone principal sobre o contêiner principal (estado vazio, lembretes)': (esquema.primary, esquema.primaryContainer),
   };
 
   for (final MapEntry(key: nome, value: (borda, fundo)) in bordas.entries) {

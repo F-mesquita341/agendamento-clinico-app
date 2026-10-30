@@ -57,13 +57,17 @@ class AberturaScreen extends StatelessWidget {
                           children: [
                             const Marca(tamanho: 60),
                             const SizedBox(height: Espaco.medio),
-                            Text(
-                              'Sua consulta marcada pelo celular, sem fila e sem ligação.',
-                              style: tema.textTheme.headlineMedium!.copyWith(color: cores.onPrimary),
+                            Semantics(
+                              header: true,
+                              namesRoute: true,
+                              child: Text(
+                                'Sua consulta marcada pelo celular, sem fila e sem ligação.',
+                                style: tema.textTheme.headlineMedium!.copyWith(color: cores.onPrimary),
+                              ),
                             ),
                             const SizedBox(height: Espaco.medio),
                             Text(
-                              'Escolha o profissional e o horário, faça o pagamento antecipado e receba um lembrete um dia antes.',
+                              'Escolha o profissional e o horário, faça o pagamento antecipado e receba um lembrete antes da consulta.',
                               style: tema.textTheme.bodyLarge!.copyWith(color: cores.primaryContainer),
                             ),
                           ],

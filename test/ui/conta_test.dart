@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/falsos.dart';
 
 Future<void> montar(WidgetTester tester, AutenticacaoFalsa autenticacao, Widget tela) async {
@@ -213,6 +214,11 @@ void main() {
       semantica.dispose();
     });
 
+    testWidgets('nos quatro aparelhos', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), const EntrarScreen(aviso: 'Sua sessão terminou.'));
+      await conferirNosQuatroAparelhos(tester);
+    });
+
     testWidgets('texto ampliado a 200% sem estourar', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -350,9 +356,27 @@ void main() {
       await expectLater(tester, meetsGuideline(textContrastGuideline));
       semantica.dispose();
     });
+
+    testWidgets('nos quatro aparelhos', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), const CriarContaScreen());
+      await conferirNosQuatroAparelhos(tester);
+    });
   });
 
   group('recuperar a senha', () {
+    testWidgets('nos quatro aparelhos, antes e depois de enviar', (tester) async {
+      await montar(
+        tester,
+        AutenticacaoFalsa(redefinicao: [null]),
+        const EsqueciASenhaScreen(emailInicial: 'ana@exemplo.test'),
+      );
+      await conferirNosQuatroAparelhos(tester);
+
+      await usarAparelho(tester, aparelhoEmPe);
+      await tocar(tester, 'Enviar link');
+      await conferirNosQuatroAparelhos(tester);
+    });
+
     testWidgets('envia o pedido e confirma — do mesmo jeito, exista ou não a conta', (tester) async {
       final autenticacao = AutenticacaoFalsa(redefinicao: [null]);
       await montar(tester, autenticacao, const EsqueciASenhaScreen(emailInicial: 'ana@exemplo.test'));

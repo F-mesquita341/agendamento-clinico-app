@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/agenda.dart';
 import '../apoio/falsos.dart';
 
@@ -990,6 +991,79 @@ void main() {
       ultimaLeitura.complete(paga);
       await tester.pumpAndSettle();
       expect(find.text('Consulta confirmada'), findsOneWidget);
+    });
+
+    group('acessibilidade nos quatro aparelhos', () {
+      testWidgets('o pagamento: nada estoura, e o botão fica fixo em pé e vai para a lista deitado', (tester) async {
+        await abrir(tester, reserva(), pagar: [checkout]);
+
+        await conferirNosQuatroAparelhos(tester);
+
+        await usarAparelho(tester, aparelhoEmPe);
+        expect(find.text(abrirPagamento), findsOneWidget);
+        expect(find.descendant(of: listaVertical(), matching: find.text(abrirPagamento)), findsNothing);
+        await conferirAvisoAcimaDoRodape(tester, find.text(abrirPagamento));
+        await usarAparelho(tester, aparelhoDeitado);
+        await tester.scrollUntilVisible(find.text(abrirPagamento), 200, scrollable: listaVertical().first);
+        expect(find.descendant(of: listaVertical(), matching: find.text(abrirPagamento)), findsOneWidget);
+      });
+
+      testWidgets('a confirmação: nada estoura, e o rodapé fica fixo em pé e vai para a lista deitado', (tester) async {
+        await abrir(tester, reserva(), pagar: [checkout], lidas: [paga]);
+        await tocarEmAbrir(tester);
+        await voltarAoApp(tester);
+        await tester.pumpAndSettle();
+        expect(find.text('Consulta confirmada'), findsOneWidget);
+
+        await conferirNosQuatroAparelhos(tester);
+
+        // Sem barra superior, o título dá ao leitor de tela o nome da tela.
+        final semantica = tester.ensureSemantics();
+        final titulo = tester.getSemantics(find.text('Consulta confirmada')).getSemanticsData();
+        expect(titulo.flagsCollection.isHeader, isTrue);
+        expect(titulo.flagsCollection.namesRoute, isTrue);
+        semantica.dispose();
+
+        await usarAparelho(tester, aparelhoEmPe);
+        expect(find.descendant(of: listaVertical(), matching: find.text('Ver minhas consultas')), findsNothing);
+        await conferirAvisoAcimaDoRodape(tester, find.text('Ver minhas consultas'));
+        await usarAparelho(tester, aparelhoDeitado);
+        await tester.scrollUntilVisible(find.text('Ver minhas consultas'), 200, scrollable: listaVertical().first);
+        expect(find.descendant(of: listaVertical(), matching: find.text('Ver minhas consultas')), findsOneWidget);
+      });
+
+      testWidgets('a folha da reserva encerrada fica abaixo da barra de status, nos quatro aparelhos', (tester) async {
+        await abrir(tester, reserva());
+        await chegarAoPrazo(tester);
+        await tester.pumpAndSettle();
+        expect(find.text(tituloDaFolha), findsOneWidget);
+
+        for (final aparelho in aparelhos) {
+          await usarAparelho(tester, aparelho);
+          expect(tester.getTopLeft(find.byType(BottomSheet)).dy, greaterThanOrEqualTo(24), reason: aparelho.nome);
+          await conferirAcessibilidade(
+            tester,
+            lista: find.descendant(of: find.byType(BottomSheet), matching: listaVertical()),
+            motivo: aparelho.nome,
+          );
+        }
+      });
+
+      testWidgets('o diálogo "Sair sem pagar?" rola a 200% deitado, sem cortar o texto', (tester) async {
+        await abrir(tester, reserva());
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('Sair sem pagar?'), findsOneWidget);
+
+        for (final aparelho in aparelhos) {
+          await usarAparelho(tester, aparelho);
+          await conferirAcessibilidade(
+            tester,
+            lista: find.descendant(of: find.byType(AlertDialog), matching: listaVertical()),
+            motivo: aparelho.nome,
+          );
+        }
+      });
     });
 
     testWidgets('toque, rótulos e contraste: no pagamento, na volta sem confirmação e na confirmação', (tester) async {

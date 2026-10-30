@@ -3,9 +3,12 @@ import 'package:agendamento_clinico/ui/comum/botoes.dart';
 import 'package:agendamento_clinico/ui/comum/estados_de_carga.dart';
 import 'package:agendamento_clinico/ui/comum/marca.dart';
 import 'package:agendamento_clinico/ui/comum/retorno.dart';
+import 'package:agendamento_clinico/ui/comum/rodape.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../apoio/acessibilidade.dart';
 
 Future<void> montar(WidgetTester tester, Widget corpo) async {
   await tester.pumpWidget(MaterialApp(
@@ -214,5 +217,29 @@ void main() {
       expect(saiu, isTrue);
       expect(find.text('Tentar de novo'), findsOneWidget);
     });
+  });
+
+  group('rodapé fixo', () {
+    // O limite fica entre o celular deitado e o menor celular em pé, e conta
+    // a altura sem as barras do sistema.
+    const emPe = FakeViewPadding(top: 24, bottom: 48);
+    for (final (aparelho, fixo) in <(Aparelho, bool)>[
+      ((nome: 'o menor celular em pé, a 100%', tela: const Size(360, 640), fonte: 1, barras: emPe), true),
+      ((nome: 'em pé, a 130%', tela: const Size(411, 891), fonte: 1.3, barras: emPe), true),
+      ((nome: 'em pé, a 150%', tela: const Size(411, 891), fonte: 1.5, barras: emPe), false),
+      ((nome: 'deitado, a 100%', tela: const Size(891, 411), fonte: 1, barras: const FakeViewPadding(top: 24)), false),
+      ((nome: 'em pé, na tela dividida', tela: const Size(411, 500), fonte: 1, barras: const FakeViewPadding(top: 24)), false),
+      ((nome: 'um tablet deitado, a 100%', tela: const Size(1280, 800), fonte: 1, barras: const FakeViewPadding(top: 24)), true),
+    ]) {
+      testWidgets('${aparelho.nome}: ${fixo ? 'fixo embaixo' : 'no fim da lista'}', (tester) async {
+        bool? resultado;
+        await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) {
+          resultado = rodapeFixo(context);
+          return const SizedBox();
+        })));
+        await usarAparelho(tester, aparelho);
+        expect(resultado, fixo);
+      });
+    }
   });
 }

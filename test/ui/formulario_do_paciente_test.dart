@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/falsos.dart';
 
 const erroDeCampos = ErroDaApi(
@@ -390,6 +391,29 @@ void main() {
       semantica.dispose();
     });
 
+    testWidgets('nos quatro aparelhos', (tester) async {
+      await montar(tester, cadastro(RepositorioDoPacienteFalso()));
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('deitado, a 200%, com o teclado aberto: o campo continua ao alcance, sem estourar', (tester) async {
+      await montar(tester, cadastro(RepositorioDoPacienteFalso()));
+      await usarAparelho(tester, aparelhos[3]);
+      await tester.scrollUntilVisible(campo(nome), 100, scrollable: find.byType(Scrollable).first);
+      await tester.showKeyboard(campo(nome));
+      tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(campo(nome).hitTestable(), findsOneWidget);
+      await preencher(tester, {nascimento: '15031990'});
+      await tester.ensureVisible(campo(nascimento));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(campo(nascimento).hitTestable(), findsOneWidget);
+    });
+
     testWidgets('texto ampliado a 200% sem estourar', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -449,6 +473,11 @@ void main() {
   });
 
   group('editar dados', () {
+    testWidgets('nos quatro aparelhos', (tester) async {
+      await montar(tester, FormularioDoPacienteViewModel.edicao(RepositorioDoPacienteFalso(), atual: pacienteDeTeste()));
+      await conferirNosQuatroAparelhos(tester);
+    });
+
     testWidgets('começa com os dados atuais, já formatados, e salva pela edição', (tester) async {
       final atual = pacienteDeTeste();
       final atualizado = pacienteDeTeste(nome: 'Ana Lima Sá');

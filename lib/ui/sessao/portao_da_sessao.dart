@@ -9,6 +9,7 @@ import '../cadastro/formulario_do_paciente_view_model.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
 import '../comum/marca.dart';
+import '../comum/textos.dart';
 import '../conta/abertura_screen.dart';
 import '../conta/entrar_screen.dart';
 import '../lembretes/lembretes_screen.dart';
@@ -100,7 +101,7 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
   Widget build(BuildContext context) {
     final sessao = context.watch<SessaoViewModel>();
     final explicacao = context.select<LembretesViewModel, ExplicacaoDosLembretes>((l) => l.explicacao);
-    return switch (sessao.estado) {
+    final tela = switch (sessao.estado) {
       EstadoDaSessao.iniciando => const _Iniciando(),
       EstadoDaSessao.carregandoPerfil => _Transicao(child: IndicadorDeCarga(demorando: sessao.demorando)),
       EstadoDaSessao.falhou => _Transicao(
@@ -138,6 +139,16 @@ class _PortaoDaSessaoState extends State<PortaoDaSessao> {
           ExplicacaoDosLembretes.nenhuma => ShellScreen(lerArquivo: widget.lerArquivo),
         },
     };
+    // As telas daqui trocam no lugar, sem rota nova, e o leitor de tela não
+    // perceberia a troca. Cada uma é anunciada como uma tela nova, pelo título
+    // dela (WCAG 4.1.2): a chave muda quando a tela muda, e não quando ela só
+    // se atualiza.
+    return Semantics(
+      key: ValueKey('${sessao.estado.name}/${explicacao.name}/${sessao.motivoDaSaida != null}'),
+      scopesRoute: true,
+      explicitChildNodes: true,
+      child: tela,
+    );
   }
 }
 
@@ -181,7 +192,7 @@ class _Iniciando extends StatelessWidget {
               children: [
                 const Marca(tamanho: 56),
                 const SizedBox(height: Espaco.maior),
-                CircularProgressIndicator(color: cores.onPrimary),
+                CircularProgressIndicator(color: cores.onPrimary, semanticsLabel: Textos.carregando),
               ],
             ),
           ),

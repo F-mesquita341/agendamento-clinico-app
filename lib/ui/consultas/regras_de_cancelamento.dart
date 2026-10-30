@@ -17,15 +17,16 @@ abstract final class RegraDoCancelamento {
   static const devolucao = 'Se você cancelar até o horário da consulta, o valor pago é devolvido integralmente. '
       'Se faltar sem cancelar, o valor não é devolvido.';
 
-  static const _horarioLivre = 'Ao cancelar, o horário volta a ficar livre para outras pessoas.';
+  /// O que acontece com o horário.
+  static const horarioLivre = 'Ao cancelar, o horário volta a ficar livre para outras pessoas.';
 
   /// O diálogo de cancelar uma consulta confirmada.
-  static const aoCancelarConfirmada = '$_horarioLivre O valor pago é devolvido integralmente.';
+  static const aoCancelarConfirmada = '$horarioLivre O valor pago é devolvido integralmente.';
 
   /// O diálogo de cancelar uma reserva que aguarda o pagamento. Não diz "você
   /// não pagou": o pagamento pode estar a caminho, e a confirmação chegar
   /// depois.
-  static const aoCancelarAguardando = 'Esta consulta ainda aguarda a confirmação do pagamento. $_horarioLivre '
+  static const aoCancelarAguardando = 'Esta consulta ainda aguarda a confirmação do pagamento. $horarioLivre '
       'Se você já pagou, o valor é devolvido integralmente.';
 
   /// As regras inteiras, com o telefone da clínica quando ela tem.
@@ -54,6 +55,7 @@ Future<void> mostrarRegrasDeCancelamento(BuildContext context, {String? telefone
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     showDragHandle: true,
     builder: (contexto) {
       final tema = Theme.of(contexto);
