@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
@@ -16,12 +17,15 @@ import 'package:agendamento_clinico/ui/busca/busca_screen.dart';
 import 'package:agendamento_clinico/ui/comum/card_do_profissional.dart';
 import 'package:agendamento_clinico/ui/comum/chip_de_escolha.dart';
 import 'package:agendamento_clinico/ui/comum/marca.dart';
+import 'package:agendamento_clinico/ui/agendamento/pagamento_antecipado.dart';
 import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:agendamento_clinico/ui/conta/criar_conta_screen.dart';
 import 'package:agendamento_clinico/ui/conta/entrar_screen.dart';
 import 'package:agendamento_clinico/ui/conta/esqueci_a_senha_screen.dart';
 import 'package:agendamento_clinico/ui/consultas/detalhes_da_consulta_screen.dart';
+import 'package:agendamento_clinico/ui/consultas/regras_de_cancelamento.dart';
 import 'package:agendamento_clinico/ui/inicio/inicio_screen.dart';
+import 'package:agendamento_clinico/ui/perfil/como_funciona_screen.dart';
 import 'package:agendamento_clinico/ui/perfil/perfil_screen.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
 import 'package:agendamento_clinico/ui/shell/shell_screen.dart';
@@ -32,6 +36,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/falsos.dart';
 
 /// A API em memória, com o comportamento da real nas rotas da Etapa 12: o
@@ -1011,6 +1016,199 @@ void main() {
     semantica.dispose();
   });
 
+  group('acessibilidade nos quatro aparelhos', () {
+    testWidgets('a espera inicial, com o indicador rotulado', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), ApiFalsa());
+      await conferirNosQuatroAparelhos(tester, assentar: false);
+
+      final semantica = tester.ensureSemantics();
+      expect(find.bySemanticsLabel('Carregando…'), findsOneWidget);
+      semantica.dispose();
+    });
+
+    testWidgets('o Perfil, o diálogo das configurações e o de sair da conta', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+      await conferirNosQuatroAparelhos(tester);
+
+      await usarAparelho(tester, aparelhoEmPe);
+      await tocar(tester, 'Ativar lembretes');
+      expect(find.text('Os lembretes continuam desativados'), findsOneWidget);
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(AlertDialog), matching: listaVertical()),
+          motivo: aparelho.nome,
+        );
+      }
+      await tester.tap(find.text('Entendi'));
+      await tester.pumpAndSettle();
+
+      await usarAparelho(tester, aparelhoEmPe);
+      await tocar(tester, 'Sair da conta');
+      expect(find.text('Sair da conta?'), findsOneWidget);
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(AlertDialog), matching: listaVertical()),
+          motivo: aparelho.nome,
+        );
+      }
+    });
+
+    testWidgets('o "Como funciona", com as perguntas fechadas e uma aberta', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+      await tocar(tester, 'Como funciona');
+      await conferirNosQuatroAparelhos(tester);
+
+      await usarAparelho(tester, aparelhoEmPe);
+      await tester.tap(find.text('Como funciona o pagamento?'));
+      await tester.pumpAndSettle();
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('a releitura do termo', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+      await tocar(tester, 'Ler o termo');
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('"Abrindo a consulta…" e a consulta de outra conta', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final notificacoes = NotificacoesFalsas();
+      final api = ApiFalsa(temPerfil: true);
+      final leitura = api.esperas['GET /consultas/77'] = Completer<void>();
+      await montar(tester, autenticacao, api, notificacoes: notificacoes);
+      await sessao(tester, autenticacao, ana);
+
+      notificacoes.tocar(lembreteDaConsulta(77));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await conferirNosQuatroAparelhos(tester, assentar: false);
+
+      leitura.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Não encontramos esta consulta nesta conta.'), findsOneWidget);
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('o aviso do lembrete com o aplicativo aberto', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final notificacoes = NotificacoesFalsas();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true), notificacoes: notificacoes);
+      await sessao(tester, autenticacao, ana);
+      notificacoes.chegarComOAppAberto(lembreteDaConsulta(90));
+      await tester.pumpAndSettle();
+
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        expect(find.text('Você tem uma consulta amanhã às 14:30.'), findsOneWidget, reason: aparelho.nome);
+        await conferirAcessibilidade(tester, motivo: aparelho.nome);
+        // Com a fonte grande, o "Ver" e o X descem para baixo do texto, que
+        // fica com a largura toda.
+        final texto = tester.getRect(find.text('Você tem uma consulta amanhã às 14:30.'));
+        final ver = tester.getRect(find.text('Ver'));
+        expect(ver.top >= texto.bottom, aparelho.fonte > 1.3, reason: aparelho.nome);
+      }
+    });
+  });
+
+  group('ajuda e telefone da clínica, no Perfil', () {
+    /// O Perfil e o "Como funciona" montam a lista aos poucos: o fim dela só
+    /// existe rolando até lá.
+    Future<void> rolarAte(WidgetTester tester, Finder alvo) =>
+        tester.scrollUntilVisible(alvo, 200, scrollable: find.byType(Scrollable).first);
+
+    /// Traz o alvo para a tela e toca. A rolagem até ele para quando ele é
+    /// montado, e montado ele pode estar ainda embaixo da barra de navegação,
+    /// ou abaixo das respostas abertas.
+    Future<void> tocarEm(WidgetTester tester, String texto) async {
+      await tester.ensureVisible(find.text(texto));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(texto));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('"Ligar para a clínica" liga para a clínica que a busca conhece, com o nome e o número', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final abridor = AbridorDeLinksFalso();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true), abridor: abridor);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+
+      await rolarAte(tester, find.text('Clínica Exemplo Quixadá · (88)\u00a03000-0000'));
+      await tocarEm(tester, 'Ligar para a clínica');
+      expect(abridor.ligacoes, ['(88) 3000-0000']);
+    });
+
+    testWidgets('sem telefone, a clínica fica de fora: nem no Perfil, nem no "Como funciona"', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final api = ApiFalsa(temPerfil: true);
+      api.forcadas['GET /profissionais'] = ApiFalsa.json(200, {
+        'profissionais': [
+          {
+            ...ApiFalsa.cardiologista,
+            'clinica': {'id': 1, 'nome': 'Clínica Exemplo Quixadá', 'telefone': null, 'endereco': null},
+          },
+        ],
+        'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
+      });
+      await montar(tester, autenticacao, api);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+
+      await rolarAte(tester, find.text('Como funciona'));
+      await rolarAte(tester, find.text('Sair da conta'));
+      expect(find.text('Ligar para a clínica'), findsNothing);
+      await tocar(tester, 'Como funciona');
+      expect(find.text('Prefere falar com alguém?'), findsNothing);
+      expect(find.text('Ligar para a clínica'), findsNothing);
+    });
+
+    testWidgets('"Como funciona": as seis perguntas, e as respostas dizem o que as telas dizem', (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final abridor = AbridorDeLinksFalso();
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true), abridor: abridor);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Perfil');
+      await tocar(tester, 'Como funciona');
+
+      expect(find.byType(ComoFuncionaScreen), findsOneWidget);
+      expect(perguntasFrequentes, hasLength(6));
+      for (final (:pergunta, resposta: _) in perguntasFrequentes) {
+        expect(find.text(pergunta), findsOneWidget, reason: pergunta);
+      }
+
+      // Fechada, a resposta não aparece; o toque abre só a escolhida.
+      expect(find.textContaining(RegraDoCancelamento.devolucao), findsNothing);
+      await tocarEm(tester, 'Como cancelo uma consulta?');
+      // A regra é a mesma das telas de cancelar, tirada do mesmo lugar.
+      expect(find.textContaining(RegraDoCancelamento.horarioLivre), findsOneWidget);
+      expect(find.textContaining(RegraDoCancelamento.devolucao), findsOneWidget);
+      expect(find.textContaining('reservado para você por $minutosDeReserva minutos'), findsNothing);
+
+      await tocarEm(tester, 'Como funciona o pagamento?');
+      expect(find.textContaining('reservado para você por $minutosDeReserva minutos'), findsOneWidget);
+      await tocarEm(tester, 'Não recebi o lembrete. O que faço?');
+      expect(find.textContaining('até 24 horas antes da consulta'), findsOneWidget);
+
+      await tocarEm(tester, 'Ligar para a clínica');
+      expect(find.text('Clínica Exemplo Quixadá · (88)\u00a03000-0000'), findsOneWidget);
+      expect(abridor.ligacoes, ['(88) 3000-0000']);
+    });
+  });
+
   group('lembretes', () {
     /// Do termo ao fim do cadastro, numa conta nova.
     Future<void> cadastrar(WidgetTester tester, AutenticacaoFalsa autenticacao) async {
@@ -1044,6 +1242,7 @@ void main() {
 
         expect(find.text('Quer receber um lembrete?'), findsOneWidget);
         expect(find.textContaining('não mostra o profissional nem a especialidade'), findsOneWidget);
+        expect(find.textContaining('Até 24 horas antes da consulta'), findsOneWidget);
         // Antes da pergunta do sistema, nada: a explicação vem primeiro.
         expect(notificacoes.perguntas, 0);
         expect(api.pedidosA('POST', '/dispositivos'), isEmpty);
@@ -1056,7 +1255,7 @@ void main() {
         expect(find.byType(ShellScreen), findsOneWidget);
         expect(find.text('Lembretes ativados.'), findsOneWidget);
         await abrirAba(tester, 'Perfil');
-        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+        await rolarAte(tester, 'Ativados: um aviso até 24 horas antes da consulta');
       });
 
       testWidgets('"Não permitir": onde ativar depois, e nada vai para a API', (tester) async {
@@ -1134,24 +1333,38 @@ void main() {
         expect(notificacoes.perguntas, 0);
       });
 
-      testWidgets('a explicação a 200%: nada estoura, e os botões têm nome e tamanho de toque', (tester) async {
-        final semantica = tester.ensureSemantics();
+      testWidgets('a explicação nos quatro aparelhos: os botões fixos em pé, e na lista deitado', (tester) async {
         final autenticacao = AutenticacaoFalsa();
         await montar(tester, autenticacao, ApiFalsa());
         await cadastrar(tester, autenticacao);
-
-        tester.platformDispatcher.textScaleFactorTestValue = 2;
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        tester.view.physicalSize = const Size(360, 640);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        await tester.pumpAndSettle();
         expect(find.byType(LembretesScreen), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await tester.scrollUntilVisible(find.text('Agora não'), 300, scrollable: find.byType(Scrollable).first);
-        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-        await expectLater(tester, meetsGuideline(textContrastGuideline));
+
+        await conferirNosQuatroAparelhos(tester);
+
+        await usarAparelho(tester, aparelhoEmPe);
+        expect(find.descendant(of: listaVertical(), matching: find.text('Agora não')), findsNothing);
+        await conferirAvisoAcimaDoRodape(tester, find.text('Agora não'));
+        await usarAparelho(tester, aparelhoDeitado);
+        await tester.scrollUntilVisible(find.text('Agora não'), 200, scrollable: listaVertical().first);
+        expect(find.descendant(of: listaVertical(), matching: find.text('Agora não')), findsOneWidget);
+      });
+
+      testWidgets('o leitor de tela anuncia a explicação como uma tela nova, pelo título dela', (tester) async {
+        final semantica = tester.ensureSemantics();
+        final autenticacao = AutenticacaoFalsa();
+        await montar(tester, autenticacao, ApiFalsa());
+        await sessao(tester, autenticacao, null);
+        final daAbertura = noDaTela(tester, find.text('Sua consulta marcada pelo celular, sem fila e sem ligação.')).id;
+
+        await cadastrar(tester, autenticacao);
+
+        final titulo = find.text('Quer receber um lembrete?');
+        final dados = tester.getSemantics(titulo).getSemanticsData();
+        expect(dados.flagsCollection.isHeader, isTrue);
+        expect(dados.flagsCollection.namesRoute, isTrue);
+        // A troca é no lugar, sem rota nova: sem um nó de tela próprio, o
+        // TalkBack não diria nada.
+        expect(noDaTela(tester, titulo).id, isNot(daAbertura));
         semantica.dispose();
       });
     });
@@ -1273,7 +1486,7 @@ void main() {
         expect(find.byType(DetalhesDaConsultaScreen), findsOneWidget);
       });
 
-      testWidgets('o aviso some sozinho', (tester) async {
+      testWidgets('o aviso fica até a pessoa fechar, e o X se vê sobre o fundo dele (WCAG 2.2.1)', (tester) async {
         final autenticacao = AutenticacaoFalsa();
         final notificacoes = NotificacoesFalsas();
         await montar(tester, autenticacao, comConsultaConfirmada(), notificacoes: notificacoes);
@@ -1281,9 +1494,21 @@ void main() {
 
         notificacoes.chegarComOAppAberto(lembreteDaConsulta(90));
         await tester.pumpAndSettle();
-        await tester.pump(const Duration(seconds: 11));
+        await tester.pump(const Duration(minutes: 1));
         await tester.pumpAndSettle();
+        expect(find.text('Você tem uma consulta amanhã às 14:30.'), findsOneWidget);
 
+        // O X, em português, com a cor do texto do aviso: o padrão do Material
+        // é claro, e sumiria sobre o fundo claro.
+        final fechar = find.byTooltip('Fechar');
+        expect(fechar, findsOneWidget);
+        final aviso = Theme.of(tester.element(fechar)).extension<CoresDeRetorno>()!.aviso;
+        final cor = tester.widget<IconButton>(find.ancestor(of: fechar, matching: find.byType(IconButton))).color!;
+        expect(razaoDeContraste(cor, aviso.fundo), greaterThanOrEqualTo(3));
+        expect(tester.getSize(find.ancestor(of: fechar, matching: find.byType(IconButton))).height, greaterThanOrEqualTo(48));
+
+        await tester.tap(fechar);
+        await tester.pumpAndSettle();
         expect(find.text('Você tem uma consulta amanhã às 14:30.'), findsNothing);
       });
     });
@@ -1300,7 +1525,7 @@ void main() {
         await tocar(tester, 'Ativar lembretes');
 
         expect(api.pedidosA('POST', '/dispositivos'), hasLength(1));
-        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+        await rolarAte(tester, 'Ativados: um aviso até 24 horas antes da consulta');
         expect(find.text('Lembretes ativados.'), findsOneWidget);
         expect(find.text('Ativar lembretes'), findsNothing);
       });
@@ -1333,7 +1558,7 @@ void main() {
         await tocar(tester, 'Tentar de novo');
 
         expect(api.pedidosA('POST', '/dispositivos'), hasLength(2));
-        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+        await rolarAte(tester, 'Ativados: um aviso até 24 horas antes da consulta');
       });
 
       testWidgets('sair: "Saindo…" enquanto o aparelho sai da API, e só depois a saída do provedor', (tester) async {
@@ -1370,7 +1595,7 @@ void main() {
         await montar(tester, autenticacao, api, notificacoes: notificacoes);
         await sessao(tester, autenticacao, ana);
         await abrirAba(tester, 'Perfil');
-        await rolarAte(tester, 'Ativados: um aviso um dia antes da consulta');
+        await rolarAte(tester, 'Ativados: um aviso até 24 horas antes da consulta');
 
         notificacoes.permitido = false;
         tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

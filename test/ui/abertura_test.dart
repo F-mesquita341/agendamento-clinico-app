@@ -3,6 +3,8 @@ import 'package:agendamento_clinico/ui/conta/abertura_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../apoio/acessibilidade.dart';
+
 /// A abertura como tela: cabe, rola quando não cabe, e é acessível. Para onde
 /// os botões levam está em aplicativo_test.dart, junto do portão da sessão.
 Future<void> montar(WidgetTester tester, {Size tela = const Size(412, 892)}) async {
@@ -35,6 +37,29 @@ void main() {
     expect(find.byWidgetPredicate((w) => w is ButtonStyleButton), findsNWidgets(2));
     expect(find.textContaining('concorda'), findsNothing);
     expect(find.textContaining('Google'), findsNothing);
+  });
+
+  testWidgets('o lembrete chega antes da consulta, sem prometer "um dia antes"', (tester) async {
+    await montar(tester);
+
+    // Uma consulta marcada para hoje ou amanhã tem o lembrete em minutos.
+    expect(find.textContaining('receba um lembrete antes da consulta'), findsOneWidget);
+    expect(find.textContaining('dia antes'), findsNothing);
+  });
+
+  testWidgets('nos quatro aparelhos', (tester) async {
+    await montar(tester);
+    await conferirNosQuatroAparelhos(tester);
+  });
+
+  testWidgets('a frase principal é o cabeçalho e dá o nome da tela ao leitor de tela', (tester) async {
+    final semantica = tester.ensureSemantics();
+    await montar(tester);
+
+    final dados = tester.getSemantics(find.text('Sua consulta marcada pelo celular, sem fila e sem ligação.')).getSemanticsData();
+    expect(dados.flagsCollection.isHeader, isTrue);
+    expect(dados.flagsCollection.namesRoute, isTrue);
+    semantica.dispose();
   });
 
   testWidgets('acessibilidade: toque de 48 dp, rótulos e contraste sobre a cor principal', (tester) async {

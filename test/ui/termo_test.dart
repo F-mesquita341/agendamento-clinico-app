@@ -18,6 +18,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/falsos.dart';
 
 /// O conteúdo de cada arquivo de cada versão do termo, fixado. Mudar uma
@@ -288,6 +289,12 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
       semantica.dispose();
+    });
+
+    testWidgets('nos quatro aparelhos, do resumo ao aceite', (tester) async {
+      await montar(tester, ['2026-09-v2']);
+      await tester.pumpAndSettle();
+      await conferirNosQuatroAparelhos(tester);
     });
 
     testWidgets('texto ampliado a 200% sem estourar', (tester) async {

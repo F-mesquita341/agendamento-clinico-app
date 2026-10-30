@@ -18,6 +18,7 @@ import '../comum/datas.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import '../comum/textos.dart';
 import 'horarios_view_model.dart';
 
@@ -71,6 +72,7 @@ class ProfissionalScreen extends StatelessWidget {
     final escolhido = await showModalBottomSheet<Horario>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (_) => _FolhaDoConflito(
         mensagem: erro.mensagem,
@@ -94,34 +96,32 @@ class ProfissionalScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Escolher horário'), bottom: etapaDoAgendamento(context, 1)),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: vm.atualizar,
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: Espaco.medio),
-                  children: [
-                    ComMargem(child: _Cabecalho(profissional: vm.profissional)),
-                    const SizedBox(height: Espaco.medio),
-                    ComMargem(child: _ClinicaEValor(profissional: vm.profissional)),
-                    const SizedBox(height: Espaco.grande),
-                    ...switch (vm.estado) {
-                      EstadoDaCarga.carregando => [IndicadorDeCarga(demorando: vm.demorando)],
-                      EstadoDaCarga.falhou => [
-                          FalhaDeCarga(mensagem: vm.erro!.mensagem, tentarDeNovo: vm.carregar),
-                        ],
-                      EstadoDaCarga.pronto => _grade(context, vm, dia),
-                    },
+        child: RefreshIndicator(
+          onRefresh: vm.atualizar,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: Espaco.medio),
+            children: [
+              ComMargem(child: _Cabecalho(profissional: vm.profissional)),
+              const SizedBox(height: Espaco.medio),
+              ComMargem(child: _ClinicaEValor(profissional: vm.profissional)),
+              const SizedBox(height: Espaco.grande),
+              ...switch (vm.estado) {
+                EstadoDaCarga.carregando => [IndicadorDeCarga(demorando: vm.demorando)],
+                EstadoDaCarga.falhou => [
+                    FalhaDeCarga(mensagem: vm.erro!.mensagem, tentarDeNovo: vm.carregar),
                   ],
-                ),
-              ),
-            ),
-            if (vm.estado == EstadoDaCarga.pronto && dia != null)
-              _Resumo(vm: vm, aoContinuar: () => _continuar(context, vm)),
-          ],
+                EstadoDaCarga.pronto => _grade(context, vm, dia),
+              },
+            ],
+          ),
         ),
       ),
+      // O resumo da escolha fica sempre fixo embaixo, mesmo deitado: é ele que
+      // diz o que foi escolhido (checklist, itens 6.1 e 10.8). Na barra de
+      // baixo da tela, um aviso fica acima dele, e não sobre o "Continuar".
+      bottomNavigationBar: vm.estado == EstadoDaCarga.pronto && dia != null
+          ? _Resumo(vm: vm, aoContinuar: () => _continuar(context, vm))
+          : null,
     );
   }
 
@@ -530,7 +530,13 @@ class _Turno extends StatelessWidget {
             spacing: Espaco.pequeno,
             children: [
               Icon(icone, size: 20, color: cores.onSurfaceVariant),
-              Text(titulo, style: tema.textTheme.titleSmall!.copyWith(fontSize: 15, color: cores.onSurfaceVariant)),
+              Semantics(
+                header: true,
+                child: Text(
+                  titulo,
+                  style: tema.textTheme.titleSmall!.copyWith(fontSize: 15, color: cores.onSurfaceVariant),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: Espaco.pequeno),
@@ -661,13 +667,7 @@ class _Resumo extends StatelessWidget {
     );
 
     // Sempre tocável, como no modelo: sem horário, o toque diz o que falta.
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: cores.surfaceContainerLowest,
-        border: Border(top: BorderSide(color: cores.outlineVariant)),
-      ),
-      padding: const EdgeInsets.all(Espaco.medio),
+    return RodapeDeAcao(
       child: fonteGrande
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,

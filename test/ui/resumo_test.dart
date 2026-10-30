@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/agenda.dart';
 import '../apoio/falsos.dart';
 
@@ -411,6 +412,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Resumo da consulta'), findsNothing);
       expect(find.text('Abrir o resumo'), findsOneWidget);
+    });
+
+    group('acessibilidade nos quatro aparelhos', () {
+      testWidgets('o resumo, com e sem a recusa: o botão fica fixo em pé e vai para a lista deitado', (tester) async {
+        await abrir(tester, ConsultasFalso(agendar: [sobreposta]));
+        await conferirNosQuatroAparelhos(tester);
+
+        await usarAparelho(tester, aparelhoEmPe);
+        expect(find.descendant(of: listaVertical(), matching: confirmar()), findsNothing);
+        await conferirAvisoAcimaDoRodape(tester, confirmar());
+        await tester.tap(confirmar());
+        await tester.pumpAndSettle();
+        await conferirNosQuatroAparelhos(tester);
+
+        await usarAparelho(tester, aparelhoDeitado);
+        await tester.scrollUntilVisible(confirmar(), 200, scrollable: listaVertical().first);
+        expect(find.descendant(of: listaVertical(), matching: confirmar()), findsOneWidget);
+      });
+
+      testWidgets('a folha do pagamento antecipado fica abaixo da barra de status', (tester) async {
+        await abrir(tester, ConsultasFalso());
+        await tester.scrollUntilVisible(
+          find.text('Saiba mais sobre o pagamento antecipado'),
+          200,
+          scrollable: listaVertical().first,
+        );
+        // À vista de fato: construído logo abaixo da lista, ele ficaria sob o
+        // rodapé fixo.
+        await tester.ensureVisible(find.text('Saiba mais sobre o pagamento antecipado'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Saiba mais sobre o pagamento antecipado'));
+        await tester.pumpAndSettle();
+
+        for (final aparelho in aparelhos) {
+          await usarAparelho(tester, aparelho);
+          expect(tester.getTopLeft(find.byType(BottomSheet)).dy, greaterThanOrEqualTo(24), reason: aparelho.nome);
+          await conferirAcessibilidade(
+            tester,
+            lista: find.descendant(of: find.byType(BottomSheet), matching: listaVertical()),
+            motivo: aparelho.nome,
+          );
+        }
+      });
     });
 
     testWidgets('toque, rótulos e contraste, com e sem a recusa', (tester) async {

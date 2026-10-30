@@ -12,6 +12,7 @@ import '../comum/datas.dart';
 import '../comum/espaco.dart';
 import '../comum/nota.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import '../comum/selo_de_status.dart';
 import '../comum/textos.dart';
 import '../profissional/profissional_screen.dart';
@@ -51,7 +52,7 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<DetalhesDaConsultaViewModel>();
     final tema = Theme.of(context);
-    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final fixo = rodapeFixo(context);
     final (:consulta, :horario, :profissional) = vm.item;
     final clinica = profissional.clinica;
     final nota = _nota(vm);
@@ -61,9 +62,12 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
         const Aviso(tipo: TipoDeRetorno.aviso, texto: Textos.servidorDemorando),
         const SizedBox(height: Espaco.medio),
       ],
-      Text(
-        diaEHora(horario.dia, horario.hora, hoje: vm.hoje),
-        style: tema.textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w800),
+      Semantics(
+        header: true,
+        child: Text(
+          diaEHora(horario.dia, horario.hora, hoje: vm.hoje),
+          style: tema.textTheme.headlineSmall!.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       const SizedBox(height: Espaco.pequeno),
       Align(
@@ -126,37 +130,20 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
         ),
     ];
 
-    final cores = tema.colorScheme;
     return PopScope(
       // Com o cancelamento no ar, sair deixaria a pessoa sem saber se cancelou.
       canPop: !vm.cancelando,
       child: Scaffold(
         appBar: AppBar(title: const Text('Detalhes da consulta')),
+        // Como no pagamento: os botões ficam fixos no rodapé e, sem altura
+        // para isso, vão para o fim da lista, que rola inteira.
         body: SafeArea(
-          // Como no pagamento: os botões ficam fixos no rodapé, e, com a fonte
-          // grande, vão para o fim da lista, que rola inteira.
-          child: fonteGrande
-              ? ListView(
-                  padding: const EdgeInsets.all(Espaco.margem),
-                  children: [...conteudo, const SizedBox(height: Espaco.grande), ...acao],
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(padding: const EdgeInsets.all(Espaco.margem), children: conteudo),
-                    ),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: cores.surfaceContainerLowest,
-                        border: Border(top: BorderSide(color: cores.outlineVariant)),
-                      ),
-                      padding: const EdgeInsets.all(Espaco.medio),
-                      child: Column(children: acao),
-                    ),
-                  ],
-                ),
+          child: ListView(
+            padding: const EdgeInsets.all(Espaco.margem),
+            children: [...conteudo, if (!fixo) ...[const SizedBox(height: Espaco.grande), ...acao]],
+          ),
         ),
+        bottomNavigationBar: fixo ? RodapeDeAcao(child: Column(children: acao)) : null,
       ),
     );
   }

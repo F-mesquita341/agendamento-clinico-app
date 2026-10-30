@@ -32,16 +32,17 @@ class PagamentoAntecipado extends StatelessWidget {
           },
           style: Theme.of(context).textTheme.bodyLarge,
         ),
-        // Um link que continua a frase de cima: começa onde ela começa, e, se
-        // quebrar de linha com a fonte grande, fica alinhado à esquerda como
-        // ela — e não centrado, como os outros botões de texto.
-        Transform.translate(
-          offset: const Offset(-Espaco.pequeno - 4, 0),
-          child: TextButton(
-            style: TextButton.styleFrom(alignment: AlignmentDirectional.centerStart),
-            onPressed: () => explicarPagamentoAntecipado(context),
-            child: const Text('Saiba mais sobre o pagamento antecipado'),
+        // Um link que continua a frase de cima, alinhado à esquerda como ela —
+        // e não centrado, como os outros botões de texto. Sem o recuo do botão,
+        // o texto começa onde a frase começa, e a área de toque não invade a
+        // margem da tela.
+        TextButton(
+          style: TextButton.styleFrom(
+            alignment: AlignmentDirectional.centerStart,
+            padding: EdgeInsets.zero,
           ),
+          onPressed: () => explicarPagamentoAntecipado(context),
+          child: const Text('Saiba mais sobre o pagamento antecipado'),
         ),
       ],
     );
@@ -55,6 +56,7 @@ Future<void> explicarPagamentoAntecipado(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     showDragHandle: true,
     builder: (contexto) {
       final tema = Theme.of(contexto);

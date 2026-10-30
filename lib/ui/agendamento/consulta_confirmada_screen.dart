@@ -12,6 +12,7 @@ import '../comum/datas.dart';
 import '../comum/espaco.dart';
 import '../comum/nota.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import '../comum/selo_de_status.dart';
 import '../lembretes/lembretes_view_model.dart';
 import '../shell/abas_do_shell.dart';
@@ -71,7 +72,7 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
     final sucesso = tema.extension<CoresDeRetorno>()!.sucesso;
     final clinica = profissional.clinica;
     final endereco = clinica?.endereco;
-    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final fixo = rodapeFixo(context);
     final hoje = DataCivil.naClinica(agora);
     final lembretesPermitidos = context.select<LembretesViewModel, bool?>((l) => l.permitidas);
     // A API manda o lembrete na primeira rodada dentro das 24 h antes da
@@ -91,6 +92,8 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
       const SizedBox(height: Espaco.medio),
       Semantics(
         header: true,
+        // Sem barra superior, é o título que dá ao leitor de tela o nome da tela.
+        namesRoute: true,
         child: Text(
           'Consulta confirmada',
           textAlign: TextAlign.center,
@@ -166,23 +169,14 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
       },
       child: Scaffold(
         body: SafeArea(
-          child: fonteGrande
-              ? ListView(
-                  padding: const EdgeInsets.all(Espaco.margem),
-                  children: [...conteudo, const SizedBox(height: Espaco.grande), voltar],
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(Espaco.margem, Espaco.maior, Espaco.margem, Espaco.margem),
-                        children: conteudo,
-                      ),
-                    ),
-                    Padding(padding: const EdgeInsets.all(Espaco.medio), child: voltar),
-                  ],
-                ),
+          child: ListView(
+            padding: fixo
+                ? const EdgeInsets.fromLTRB(Espaco.margem, Espaco.maior, Espaco.margem, Espaco.margem)
+                : const EdgeInsets.all(Espaco.margem),
+            children: [...conteudo, if (!fixo) ...[const SizedBox(height: Espaco.grande), voltar]],
+          ),
         ),
+        bottomNavigationBar: fixo ? RodapeDeAcao(decorado: false, child: voltar) : null,
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../comum/botoes.dart';
 import '../comum/espaco.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import 'lembretes_view_model.dart';
 
 /// "Quer receber um lembrete?": logo depois do cadastro, explica o lembrete
@@ -56,7 +57,7 @@ class _LembretesScreenState extends State<LembretesScreen> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final cores = tema.colorScheme;
-    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final fixo = rodapeFixo(context);
 
     final conteudo = [
       Center(
@@ -70,6 +71,7 @@ class _LembretesScreenState extends State<LembretesScreen> {
       const SizedBox(height: Espaco.medio),
       Semantics(
         header: true,
+        namesRoute: true,
         child: Text(
           'Quer receber um lembrete?',
           textAlign: TextAlign.center,
@@ -78,7 +80,7 @@ class _LembretesScreenState extends State<LembretesScreen> {
       ),
       const SizedBox(height: Espaco.medio),
       Text(
-        'Um dia antes da consulta, o aplicativo avisa você. O lembrete diz só quando é a consulta: '
+        'Até 24 horas antes da consulta, o aplicativo avisa você. O lembrete diz só quando é a consulta: '
         'não mostra o profissional nem a especialidade.',
         textAlign: TextAlign.center,
         style: tema.textTheme.bodyLarge,
@@ -108,25 +110,19 @@ class _LembretesScreenState extends State<LembretesScreen> {
         value: SystemUiOverlayStyle.dark,
         child: Scaffold(
           body: SafeArea(
-            child: fonteGrande
-                ? ListView(
+            child: fixo
+                ? Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(Espaco.margem),
+                      child: Column(children: conteudo),
+                    ),
+                  )
+                : ListView(
                     padding: const EdgeInsets.all(Espaco.margem),
                     children: [...conteudo, const SizedBox(height: Espaco.grande), botoes],
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(Espaco.margem),
-                            child: Column(children: conteudo),
-                          ),
-                        ),
-                      ),
-                      Padding(padding: const EdgeInsets.all(Espaco.medio), child: botoes),
-                    ],
                   ),
           ),
+          bottomNavigationBar: fixo ? RodapeDeAcao(decorado: false, child: botoes) : null,
         ),
       ),
     );

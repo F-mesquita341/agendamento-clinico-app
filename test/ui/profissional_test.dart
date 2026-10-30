@@ -16,6 +16,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/agenda.dart';
 import '../apoio/falsos.dart';
 
@@ -978,6 +979,29 @@ void main() {
   });
 
   group('acessibilidade', () {
+    testWidgets('nos quatro aparelhos, com dia e horário escolhidos: o resumo da escolha fica sempre embaixo', (
+      tester,
+    ) async {
+      await montar(tester, horarios: [gradeComum]);
+      await tocar(tester, hora('14:30'));
+
+      await conferirNosQuatroAparelhos(tester);
+
+      // Deitado, o resumo continua fixo: é ele que diz o que foi escolhido.
+      await usarAparelho(tester, aparelhoDeitado);
+      expect(find.descendant(of: listaVertical(), matching: find.text('Continuar')), findsNothing);
+      expect(find.text('Continuar').hitTestable(), findsOneWidget);
+      await conferirAvisoAcimaDoRodape(tester, find.text('Continuar'));
+
+      // Manhã e Tarde dividem a grade para quem navega pelos cabeçalhos.
+      final semantica = tester.ensureSemantics();
+      for (final turno in ['Manhã', 'Tarde']) {
+        await tester.scrollUntilVisible(find.text(turno), 200, scrollable: listaVertical().first);
+        expect(tester.getSemantics(find.text(turno)).getSemanticsData().flagsCollection.isHeader, isTrue, reason: turno);
+      }
+      semantica.dispose();
+    });
+
     testWidgets('toque, rótulos e contraste, com dia e horário escolhidos', (tester) async {
       final semantica = tester.ensureSemantics();
       await montar(tester, horarios: [gradeComum]);
@@ -1155,6 +1179,23 @@ void main() {
         findsOneWidget,
       );
       expect(montagem.vm.horarioEscolhido, isNull);
+    });
+
+    testWidgets('a folha do conflito fica abaixo da barra de status, nos quatro aparelhos', (tester) async {
+      await montar(tester, horarios: [gradeComum, gradeNova], consultas: ConsultasFalso(agendar: [conflito]));
+      await perderAs1430(tester);
+      await tester.pumpAndSettle();
+      expect(find.text(tituloDoConflito), findsOneWidget);
+
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        expect(tester.getTopLeft(find.byType(BottomSheet)).dy, greaterThanOrEqualTo(24), reason: aparelho.nome);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(BottomSheet), matching: listaVertical()),
+          motivo: aparelho.nome,
+        );
+      }
     });
 
     testWidgets('as sugestões são os horários livres mais próximos, da grade nova, a partir do dia perdido', (

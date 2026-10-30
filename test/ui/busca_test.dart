@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:agendamento_clinico/config/tema.dart';
+import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/domain/models/pagina.dart';
@@ -13,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/acessibilidade.dart';
 import '../apoio/falsos.dart';
 
 const cardiologia = Especialidade(id: 2, nome: 'Cardiologia');
@@ -922,6 +924,54 @@ void main() {
     });
   });
 
+  group('clínicas', () {
+    const centro = Clinica(nome: 'Clínica Centro', telefone: '(88) 3000-0000');
+    const norte = Clinica(nome: 'Clínica Norte', telefone: '(88) 3000-1111');
+    Profissional em(Profissional profissional, Clinica clinica) => Profissional(
+          id: profissional.id,
+          nome: profissional.nome,
+          registroConselho: profissional.registroConselho,
+          valorFormatado: profissional.valorFormatado,
+          especialidade: profissional.especialidade,
+          clinica: clinica,
+        );
+
+    test('juntam as dos profissionais mostrados, sem repetir; um filtro depois não as apaga', () async {
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([em(timbo, centro), em(ana, centro), antonio], paginas: 2, total: 4),
+        paginaDe([em(antonio, norte)], pagina: 2, paginas: 2, total: 4),
+        paginaDe([]),
+      ]);
+      final vm = BuscaViewModel(catalogo);
+      addTearDown(vm.dispose);
+
+      await vm.carregar();
+      expect(vm.clinicas, [centro]);
+      await vm.mostrarMais();
+      expect(vm.clinicas, [centro, norte]);
+
+      // Um filtro sem ninguém: a lista some, as clínicas ficam.
+      vm.escolherEspecialidade(pediatria.id);
+      await pumpEventQueue();
+      expect(vm.profissionais, isEmpty);
+      expect(vm.clinicas, [centro, norte]);
+    });
+
+    test('a busca que falhou não tem clínica; o "Tentar de novo" traz', () async {
+      final catalogo = CatalogoFalso(especialidades: [especialidades], profissionais: [
+        const ErroDaApi.semConexao(),
+        paginaDe([em(timbo, centro)]),
+      ]);
+      final vm = BuscaViewModel(catalogo);
+      addTearDown(vm.dispose);
+
+      await vm.carregar();
+      expect(vm.clinicas, isEmpty);
+      await vm.carregar();
+      expect(vm.clinicas, [centro]);
+    });
+  });
+
   group('atualizar', () {
     testWidgets('puxar para baixo pede de novo, com a lista na tela enquanto a nova chega', (tester) async {
       final segunda = Completer<Pagina<Profissional>>();
@@ -1045,6 +1095,18 @@ void main() {
   });
 
   group('acessibilidade', () {
+    testWidgets('nos quatro aparelhos, com filtro ativo e lista na tela', (tester) async {
+      await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [
+        paginaDe([ana, timbo]),
+        paginaDe([timbo], paginas: 2, total: 2),
+        paginaDe([timbo], paginas: 2, total: 2),
+      ]));
+      await tocarNoChip(tester, 'Cardiologia');
+      await buscarPor(tester, 'cardio');
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
     testWidgets('toque, rótulos e contraste, com filtro ativo e lista na tela', (tester) async {
       final semantica = tester.ensureSemantics();
       await montar(tester, CatalogoFalso(especialidades: [especialidades], profissionais: [

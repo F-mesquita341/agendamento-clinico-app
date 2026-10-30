@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../../apoio/acessibilidade.dart';
 import '../../apoio/agenda.dart';
 import '../../apoio/falsos.dart';
 
@@ -567,6 +568,82 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Pagar agora').hitTestable(), findsOneWidget);
       expect(botaoDoRodape('Cancelar consulta').hitTestable(), findsOneWidget);
+    });
+  });
+
+  group('acessibilidade nos quatro aparelhos', () {
+    testWidgets('o Início, com a reserva, a próxima consulta e as especialidades', (tester) async {
+      await montar(
+        tester,
+        aba: const InicioScreen(),
+        minhas: [
+          pagina([consultaNa(horario(8, 16, 9), id: 51), reservada]),
+        ],
+        especialidades: [
+          [cardiologia],
+        ],
+        profissionais: [paginaDe([])],
+      );
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('Minhas consultas, nas duas listas', (tester) async {
+      await montar(tester, aba: const MinhasConsultasScreen(), minhas: [pagina([confirmada, cancelada])]);
+      await conferirNosQuatroAparelhos(tester);
+
+      await tester.tap(find.text('Anteriores (1)'));
+      await tester.pumpAndSettle();
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('os detalhes: os botões ficam fixos em pé e vão para a lista deitado', (tester) async {
+      await montar(tester, abrirDetalhes: itemDe(reservada));
+
+      await conferirNosQuatroAparelhos(tester);
+
+      await usarAparelho(tester, aparelhoEmPe);
+      expect(find.descendant(of: listaVertical(), matching: find.text('Pagar agora')), findsNothing);
+      await conferirAvisoAcimaDoRodape(tester, botaoDoRodape('Cancelar consulta'));
+
+      // A data é o título da tela, para quem navega pelos cabeçalhos.
+      final semantica = tester.ensureSemantics();
+      final data = tester.getSemantics(find.text('Amanhã, quinta-feira, 15/10 · 14:30'));
+      expect(data.getSemanticsData().flagsCollection.isHeader, isTrue);
+      semantica.dispose();
+      await usarAparelho(tester, aparelhoDeitado);
+      await tester.scrollUntilVisible(find.text('Pagar agora'), 200, scrollable: listaVertical().first);
+      expect(find.descendant(of: listaVertical(), matching: find.text('Pagar agora')), findsOneWidget);
+    });
+
+    testWidgets('o diálogo de cancelar e a folha das regras, abaixo da barra de status', (tester) async {
+      await montar(tester, abrirDetalhes: itemDe(confirmada));
+      await tester.tap(botaoDoRodape('Cancelar consulta'));
+      await tester.pumpAndSettle();
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(AlertDialog), matching: listaVertical()),
+          motivo: aparelho.nome,
+        );
+      }
+      await tester.tap(noDialogo('Manter consulta'));
+      await tester.pumpAndSettle();
+
+      await usarAparelho(tester, aparelhoEmPe);
+      await tester.scrollUntilVisible(find.text('Regras de cancelamento'), 200, scrollable: listaVertical().first);
+      await tester.tap(find.text('Regras de cancelamento'));
+      await tester.pumpAndSettle();
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        expect(tester.getTopLeft(find.byType(BottomSheet)).dy, greaterThanOrEqualTo(24), reason: aparelho.nome);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(BottomSheet), matching: listaVertical()),
+          motivo: aparelho.nome,
+        );
+      }
     });
   });
 }

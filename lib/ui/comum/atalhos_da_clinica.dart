@@ -39,11 +39,7 @@ class AtalhosDaClinica extends StatelessWidget {
         if (telefone != null)
           Expanded(
             child: TextButton.icon(
-              onPressed: () => _abrir(
-                context,
-                (abridor) => abridor.ligar(telefone),
-                seFalhar: 'Não foi possível abrir o telefone. O número da clínica é $telefone.',
-              ),
+              onPressed: () => ligarParaAClinica(context, telefone),
               icon: const Icon(Icons.call_outlined),
               label: Text(rotuloDeLigar),
             ),
@@ -52,14 +48,23 @@ class AtalhosDaClinica extends StatelessWidget {
     );
   }
 
-  /// Sai do aplicativo para o mapa ou o discador. Se o aparelho não tem com o
-  /// que abrir, o dado vai na mensagem, para a pessoa usá-lo como puder.
-  Future<void> _abrir(
-    BuildContext context,
-    Future<bool> Function(AbridorDeLinks abridor) abrir, {
-    required String seFalhar,
-  }) async {
-    final abriu = await abrir(context.read<AbridorDeLinks>());
-    if (!abriu && context.mounted) mostrarRetorno(context, TipoDeRetorno.erro, seFalhar);
-  }
+}
+
+/// Abre o discador com o telefone da clínica — daqui, do Perfil e do "Como
+/// funciona".
+Future<void> ligarParaAClinica(BuildContext context, String telefone) => _abrir(
+      context,
+      (abridor) => abridor.ligar(telefone),
+      seFalhar: 'Não foi possível abrir o telefone. O número da clínica é $telefone.',
+    );
+
+/// Sai do aplicativo para o mapa ou o discador. Se o aparelho não tem com o
+/// que abrir, o dado vai na mensagem, para a pessoa usá-lo como puder.
+Future<void> _abrir(
+  BuildContext context,
+  Future<bool> Function(AbridorDeLinks abridor) abrir, {
+  required String seFalhar,
+}) async {
+  final abriu = await abrir(context.read<AbridorDeLinks>());
+  if (!abriu && context.mounted) mostrarRetorno(context, TipoDeRetorno.erro, seFalhar);
 }

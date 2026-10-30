@@ -2,10 +2,14 @@
     <!-- O modelo do Flutter só declara a internet no manifesto de depuração:
          sem esta linha, o APK de release não alcança a API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Sem backup nem transferência entre aparelhos: a sessão do Firebase
+         não sai do aparelho (res/xml/regras_de_extracao.xml). -->
     <application
         android:label="Marcaí"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/regras_de_extracao">
         <activity
             android:name=".MainActivity"
             android:exported="true"

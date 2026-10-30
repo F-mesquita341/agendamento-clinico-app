@@ -18,6 +18,8 @@ Future<bool> confirmar(
     builder: (contexto) {
       final cores = Theme.of(contexto).colorScheme;
       return AlertDialog(
+        // A 200%, com o celular deitado, o texto rola em vez de ser cortado.
+        scrollable: true,
         title: Text(titulo),
         content: Text(texto),
         actions: [

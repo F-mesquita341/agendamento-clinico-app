@@ -3,20 +3,24 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_do_paciente.dart';
 import '../../domain/models/data_civil.dart';
+import '../busca/busca_view_model.dart';
+import '../comum/atalhos_da_clinica.dart';
 import '../comum/avatar.dart';
 import '../comum/botoes.dart';
 import '../comum/confirmacao.dart';
 import '../comum/espaco.dart';
 import '../comum/retorno.dart';
+import '../comum/textos.dart';
 import '../cadastro/formulario_do_paciente_screen.dart';
 import '../cadastro/formulario_do_paciente_view_model.dart';
 import '../cadastro/mascaras.dart';
 import '../lembretes/lembretes_view_model.dart';
 import '../sessao/sessao_view_model.dart';
 import '../termo/termo_lido_screen.dart';
+import 'como_funciona_screen.dart';
 
-/// Os dados do paciente, o termo que ele aceitou, os lembretes e a saída da
-/// conta.
+/// Os dados do paciente, o termo que ele aceitou, os lembretes, a ajuda e a
+/// saída da conta.
 class PerfilScreen extends StatelessWidget {
   const PerfilScreen({super.key, required this.lerArquivo});
 
@@ -61,6 +65,7 @@ class PerfilScreen extends StatelessWidget {
     return showDialog<void>(
       context: context,
       builder: (contexto) => AlertDialog(
+        scrollable: true,
         title: const Text('Os lembretes continuam desativados'),
         content: const Text(
           'Se o Android não mostrou a pergunta, ative nas configurações do celular: '
@@ -88,6 +93,7 @@ class PerfilScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final sessao = context.watch<SessaoViewModel>();
     final lembretes = context.watch<LembretesViewModel>();
+    final clinicas = context.watch<BuscaViewModel>().clinicas;
     final paciente = sessao.paciente;
     // Entre a saída e a troca de tela, não há perfil para mostrar.
     if (paciente == null) return const Scaffold();
@@ -162,7 +168,7 @@ class PerfilScreen extends StatelessWidget {
                   valor: switch (lembretes.estado) {
                     EstadoDosLembretes.conferindo => 'Conferindo…',
                     EstadoDosLembretes.ativando => 'Ativando…',
-                    EstadoDosLembretes.ativados => 'Ativados: um aviso um dia antes da consulta',
+                    EstadoDosLembretes.ativados => 'Ativados: um aviso até 24 horas antes da consulta',
                     EstadoDosLembretes.desativados => 'Desativados',
                     EstadoDosLembretes.falhou => 'Não foi possível confirmar os lembretes agora',
                   },
@@ -181,6 +187,29 @@ class PerfilScreen extends StatelessWidget {
                     abreOutraTela: false,
                     aoTocar: lembretes.tentarDeNovo,
                   ),
+              ],
+            ),
+            const SizedBox(height: Espaco.medio),
+            _Grupo(
+              children: [
+                _Acao(
+                  icone: Icons.help_outline,
+                  rotulo: 'Como funciona',
+                  aoTocar: () => Navigator.of(context).push<void>(MaterialPageRoute(
+                    builder: (_) => ComoFuncionaScreen(clinicas: clinicas),
+                  )),
+                ),
+                // Sem telefone, não há para onde ligar: a clínica fica de fora.
+                for (final clinica in clinicas)
+                  if (clinica.telefone case final telefone?)
+                    _Acao(
+                      icone: Icons.call_outlined,
+                      rotulo: 'Ligar para a clínica',
+                      detalhe: '${clinica.nome} · ${semQuebra(telefone)}',
+                      // O discador é de fora do aplicativo: sem a seta de outra tela.
+                      abreOutraTela: false,
+                      aoTocar: () => ligarParaAClinica(context, telefone),
+                    ),
               ],
             ),
             const SizedBox(height: Espaco.grande),
@@ -241,11 +270,20 @@ class _Dado extends StatelessWidget {
 
 /// Uma linha que faz algo: leva a outra tela, com a seta, ou age ali mesmo.
 class _Acao extends StatelessWidget {
-  const _Acao({required this.icone, required this.rotulo, required this.aoTocar, this.abreOutraTela = true});
+  const _Acao({
+    required this.icone,
+    required this.rotulo,
+    required this.aoTocar,
+    this.detalhe,
+    this.abreOutraTela = true,
+  });
 
   final IconData icone;
   final String rotulo;
   final VoidCallback aoTocar;
+
+  /// O que vai abaixo do rótulo, em letra menor.
+  final String? detalhe;
 
   /// A seta promete outra tela; uma ação que acontece ali mesmo não a tem.
   final bool abreOutraTela;
@@ -256,6 +294,13 @@ class _Acao extends StatelessWidget {
     return ListTile(
       leading: ExcludeSemantics(child: Icon(icone, color: tema.colorScheme.primary)),
       title: Text(rotulo, style: tema.textTheme.titleSmall),
+      subtitle: switch (detalhe) {
+        final detalhe? => Text(
+            detalhe,
+            style: tema.textTheme.bodyMedium!.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          ),
+        null => null,
+      },
       trailing: abreOutraTela ? const ExcludeSemantics(child: Icon(Icons.chevron_right)) : null,
       onTap: aoTocar,
     );

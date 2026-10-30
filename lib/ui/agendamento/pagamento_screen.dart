@@ -13,6 +13,7 @@ import '../comum/confirmacao.dart';
 import '../comum/espaco.dart';
 import '../comum/nota.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import '../comum/textos.dart';
 import '../consultas/regras_de_cancelamento.dart';
 import '../profissional/profissional_screen.dart';
@@ -119,6 +120,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     final deNovo = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       builder: (contexto) => _ReservaEncerrada(
         motivo: _vm.motivoDoFim,
@@ -171,7 +173,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     final acabou = situacao == SituacaoDoPagamento.confirmada ||
         situacao == SituacaoDoPagamento.encerrada ||
         situacao == SituacaoDoPagamento.cancelada;
-    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final fixo = rodapeFixo(context);
 
     final conteudo = [
       if (vm.demorando) ...[
@@ -225,7 +227,6 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
       ],
     ];
 
-    final cores = tema.colorScheme;
     return PopScope(
       // Sair sem pagar pergunta antes; depois de decidido, sai direto.
       canPop: acabou,
@@ -237,33 +238,19 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
           title: const Text('Pagamento'),
           bottom: widget.reaberta ? null : etapaDoAgendamento(context, 3),
         ),
+        // Como no resumo: o botão fica fixo no rodapé e, sem altura para isso,
+        // vai para o fim da lista, que rola inteira. O aviso de ambiente de
+        // teste vai junto com ele.
         body: SafeArea(
-          // Como no resumo: o botão fica fixo no rodapé, e, com a fonte
-          // grande, vai para o fim da lista, que rola inteira. O aviso de
-          // ambiente de teste vai junto com ele.
-          child: fonteGrande
-              ? ListView(
-                  padding: const EdgeInsets.all(Espaco.margem),
-                  children: [...conteudo, const SizedBox(height: Espaco.grande), ...acao],
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(padding: const EdgeInsets.all(Espaco.margem), children: conteudo),
-                    ),
-                    if (acao.isNotEmpty)
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: cores.surfaceContainerLowest,
-                          border: Border(top: BorderSide(color: cores.outlineVariant)),
-                        ),
-                        padding: const EdgeInsets.all(Espaco.medio),
-                        child: Column(children: acao),
-                      ),
-                  ],
-                ),
+          child: ListView(
+            padding: const EdgeInsets.all(Espaco.margem),
+            children: [
+              ...conteudo,
+              if (!fixo && acao.isNotEmpty) ...[const SizedBox(height: Espaco.grande), ...acao],
+            ],
+          ),
         ),
+        bottomNavigationBar: fixo && acao.isNotEmpty ? RodapeDeAcao(child: Column(children: acao)) : null,
       ),
     );
   }

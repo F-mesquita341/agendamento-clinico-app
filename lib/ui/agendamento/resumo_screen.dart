@@ -11,6 +11,7 @@ import '../comum/botoes.dart';
 import '../comum/espaco.dart';
 import '../comum/nota.dart';
 import '../comum/retorno.dart';
+import '../comum/rodape.dart';
 import '../comum/textos.dart';
 import 'cartao_da_consulta.dart';
 import 'etapa_do_agendamento.dart';
@@ -67,7 +68,6 @@ class ResumoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<ResumoViewModel>();
-    final cores = Theme.of(context).colorScheme;
 
     final conteudo = [
       if (vm.demorando) ...[
@@ -102,38 +102,22 @@ class ResumoScreen extends StatelessWidget {
       ),
     ];
 
-    // O botão fica fixo no rodapé, como no modelo. Com a fonte grande, ele vai
-    // para o fim da lista, que rola inteira: fixo, junto com o aviso de erro,
-    // ele tomaria uma tela pequena toda.
-    final fonteGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    // O botão fica fixo no rodapé, como no modelo. Sem altura para isso, ele
+    // vai para o fim da lista, que rola inteira: fixo, junto com o aviso de
+    // erro, ele tomaria a tela toda.
+    final fixo = rodapeFixo(context);
     return PopScope(
       // Sair no meio do envio deixaria uma reserva feita sem a pessoa saber.
       canPop: !vm.enviando,
       child: Scaffold(
         appBar: AppBar(title: const Text('Resumo da consulta'), bottom: etapaDoAgendamento(context, 2)),
         body: SafeArea(
-          child: fonteGrande
-              ? ListView(
-                  padding: const EdgeInsets.all(Espaco.margem),
-                  children: [...conteudo, const SizedBox(height: Espaco.grande), ...acao],
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView(padding: const EdgeInsets.all(Espaco.margem), children: conteudo),
-                    ),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: cores.surfaceContainerLowest,
-                        border: Border(top: BorderSide(color: cores.outlineVariant)),
-                      ),
-                      padding: const EdgeInsets.all(Espaco.medio),
-                      child: Column(children: acao),
-                    ),
-                  ],
-                ),
+          child: ListView(
+            padding: const EdgeInsets.all(Espaco.margem),
+            children: [...conteudo, if (!fixo) ...[const SizedBox(height: Espaco.grande), ...acao]],
+          ),
         ),
+        bottomNavigationBar: fixo ? RodapeDeAcao(child: Column(children: acao)) : null,
       ),
     );
   }
