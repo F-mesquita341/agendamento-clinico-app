@@ -229,6 +229,57 @@ void main() {
     });
   });
 
+  group('o erro do e-mail espera a pessoa sair do campo', () {
+    const formato = 'Confira o e-mail digitado (ex.: nome@email.com).';
+
+    testWidgets('digitando pela primeira vez, nada de erro; ao sair do campo, o erro', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), const CriarContaScreen());
+
+      await tester.enterText(campo('E-mail'), 'por');
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsNothing);
+
+      await tester.showKeyboard(campo('Senha'));
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsOneWidget);
+    });
+
+    testWidgets('depois do erro, corrigir o endereço tira o erro sem sair do campo', (tester) async {
+      await montar(tester, AutenticacaoFalsa(), const CriarContaScreen());
+      await tester.enterText(campo('E-mail'), 'por');
+      await tester.showKeyboard(campo('Senha'));
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsOneWidget);
+
+      await tester.enterText(campo('E-mail'), 'portao@exemplo.com');
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsNothing);
+
+      // Daqui em diante, o campo confere a cada tecla.
+      await tester.enterText(campo('E-mail'), 'portao@');
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsOneWidget);
+    });
+
+    testWidgets('passar pelo campo sem escrever não acusa nada, nem depois, ao voltar e digitar; o botão, sim', (
+      tester,
+    ) async {
+      await montar(tester, AutenticacaoFalsa(), const CriarContaScreen());
+      await tester.showKeyboard(campo('E-mail'));
+      await tester.pump();
+      await tester.showKeyboard(campo('Senha'));
+      await tester.pump();
+      expect(erroNoCampo('E-mail', 'Informe o e-mail.'), findsNothing);
+
+      await tester.enterText(campo('E-mail'), 'por');
+      await tester.pump();
+      expect(erroNoCampo('E-mail', formato), findsNothing);
+
+      await tocar(tester, 'Criar conta');
+      expect(erroNoCampo('E-mail', formato), findsOneWidget);
+    });
+  });
+
   group('criar conta', () {
     Future<void> abrirAPartirDeEntrar(WidgetTester tester, AutenticacaoFalsa autenticacao) async {
       await montar(tester, autenticacao, const EntrarScreen());
