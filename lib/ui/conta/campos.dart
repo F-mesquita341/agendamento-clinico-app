@@ -3,7 +3,13 @@ import 'package:flutter/services.dart';
 
 /// Campo de e-mail: rótulo que não some ao digitar (checklist, item 6.8),
 /// teclado de e-mail e preenchimento automático (item 5.5).
-class CampoDeEmail extends StatelessWidget {
+///
+/// O erro espera a pessoa sair do campo: enquanto ela digita pela primeira
+/// vez, "ana@" é o começo de um endereço, e não um erro — no portão da Etapa
+/// 18, o vermelho aparecia na primeira letra. Depois que ela sai, o campo
+/// confere a cada tecla, e o erro some assim que o endereço fica certo. O
+/// botão de enviar confere tudo, como antes.
+class CampoDeEmail extends StatefulWidget {
   const CampoDeEmail({
     super.key,
     required this.controlador,
@@ -24,21 +30,39 @@ class CampoDeEmail extends StatelessWidget {
   final ValueChanged<String>? aoConcluir;
 
   @override
+  State<CampoDeEmail> createState() => _CampoDeEmailState();
+}
+
+class _CampoDeEmailState extends State<CampoDeEmail> {
+  /// Se a pessoa já saiu do campo com algo escrito. Sair dele vazio não é
+  /// erro ainda: "Informe o e-mail" fica para o botão de enviar.
+  bool _saiu = false;
+
+  void _aoMudarOFoco(bool focado) {
+    if (!focado && !_saiu && widget.controlador.text.isNotEmpty) setState(() => _saiu = true);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controlador,
-      decoration: const InputDecoration(labelText: 'E-mail'),
-      keyboardType: TextInputType.emailAddress,
-      autofillHints: const [AutofillHints.email],
-      autocorrect: false,
-      textInputAction: acaoDoTeclado,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      validator: validar,
-      forceErrorText: erro,
-      onChanged: aoMudar,
-      onFieldSubmitted: aoConcluir,
-      // Espaço digitado sem querer no fim não pode virar "e-mail inválido".
-      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: _aoMudarOFoco,
+      child: TextFormField(
+        controller: widget.controlador,
+        decoration: const InputDecoration(labelText: 'E-mail'),
+        keyboardType: TextInputType.emailAddress,
+        autofillHints: const [AutofillHints.email],
+        autocorrect: false,
+        textInputAction: widget.acaoDoTeclado,
+        autovalidateMode: _saiu ? AutovalidateMode.onUserInteraction : AutovalidateMode.disabled,
+        validator: widget.validar,
+        forceErrorText: widget.erro,
+        onChanged: widget.aoMudar,
+        onFieldSubmitted: widget.aoConcluir,
+        // Espaço digitado sem querer no fim não pode virar "e-mail inválido".
+        inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+      ),
     );
   }
 }
