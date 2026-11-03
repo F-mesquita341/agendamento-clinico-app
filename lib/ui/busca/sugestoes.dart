@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../../domain/models/especialidade.dart';
 
 /// Como as pessoas chamam cada especialidade (checklist, item 2.7): quem
@@ -11,6 +13,17 @@ const _apoio = {
   'ginecologia': 'saúde da mulher',
   'ortopedia': 'ossos e articulações',
   'pediatria': 'crianças',
+};
+
+/// O ícone de cada especialidade, do Material, pela mesma chave do apoio. É
+/// reforço visual: o nome vem sempre escrito ao lado.
+const _icones = {
+  'cardiologia': Icons.monitor_heart_outlined,
+  'clinica geral': Icons.medical_services_outlined,
+  'dermatologia': Icons.face_outlined,
+  'ginecologia': Icons.pregnant_woman,
+  'ortopedia': Icons.accessibility_new,
+  'pediatria': Icons.child_care,
 };
 
 const _comAcento = 'áàâãäéèêëíìîïóòôõöúùûüç';
@@ -50,3 +63,7 @@ Iterable<String> _formasDeChamar(Especialidade especialidade) {
 /// Como as pessoas chamam a especialidade — "coração", para Cardiologia —,
 /// para aparecer junto do nome (checklist, item 2.7). Null se não há.
 String? apoioDaEspecialidade(Especialidade especialidade) => _apoio[semAcento(especialidade.nome)];
+
+/// O ícone da especialidade; a que não está no mapa fica com o genérico.
+IconData iconeDaEspecialidade(Especialidade especialidade) =>
+    _icones[semAcento(especialidade.nome)] ?? Icons.medical_services_outlined;

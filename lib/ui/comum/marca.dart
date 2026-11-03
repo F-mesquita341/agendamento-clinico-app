@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../config/tema.dart';
 import 'textos.dart';
 
-/// O nome do aplicativo como marca: "marcaí", com o "í" em âmbar. Para fundos
+/// O nome do aplicativo como marca: "marcaí", com o "í" em pêssego. Para fundos
 /// na cor principal — a abertura, a espera inicial.
 ///
 /// É um texto só, e não duas peças lado a lado: o leitor de tela lê o nome
@@ -26,7 +26,7 @@ class Marca extends StatelessWidget {
         const TextSpan(
           children: [
             TextSpan(text: 'marca'),
-            TextSpan(text: 'í', style: TextStyle(color: ambarDaMarca)),
+            TextSpan(text: 'í', style: TextStyle(color: pessegoDaMarca)),
           ],
         ),
         // O nome próprio, como se escreve.

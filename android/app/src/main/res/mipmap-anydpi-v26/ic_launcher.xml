@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- O ícone adaptativo (Android 8 em diante): o selo "m" do modelo, branco
-     sobre a ameixa. A mesma frente serve de camada monocromática, para os
-     ícones temáticos do Android 13. Os PNGs da frente e os do ícone antigo
-     (Android 7) são desenhados por .claude/etapa-18/gerar_icone.dart, com a
-     fonte do aplicativo. -->
+<!-- O ícone adaptativo (Android 8 em diante): o coração com batimento,
+     branco, sobre o verde. A linha do batimento é recortada, e por isso a
+     mesma frente serve de camada monocromática, para os ícones temáticos do
+     Android 13. Os PNGs são desenhados por .claude/versao-2/gerar_icone.dart
+     com o pintor das telas (lib/ui/comum/coracao.dart). -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ameixa" />
+    <background android:drawable="@color/verde" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
     <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>

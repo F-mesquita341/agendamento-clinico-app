@@ -46,10 +46,12 @@ void main() {
     'retorno de erro': (esquema.onErrorContainer, esquema.errorContainer),
     'retorno de sucesso': (retorno.sucesso.texto, retorno.sucesso.fundo),
     'retorno de aviso': (retorno.aviso.texto, retorno.aviso.fundo),
+    'informação (nota)': (retorno.informacao.texto, retorno.informacao.fundo),
     'chip': (textoDoChip({}), fundoDoChip({})),
     'chip escolhido': (textoDoChip(escolhido), fundoDoChip(escolhido)),
     'texto claro sobre a cor principal (abertura)': (esquema.primaryContainer, esquema.primary),
     'selo de cancelada': (esquema.onSurface, esquema.surfaceContainerHighest),
+    for (final (i, cor) in coresDosAvatares.indexed) 'iniciais brancas sobre a cor de avatar ${i + 1}': (Colors.white, cor),
   };
 
   for (final MapEntry(key: nome, value: (texto, fundo)) in textos.entries) {
@@ -70,8 +72,9 @@ void main() {
     'borda do chip sobre o próprio chip': (bordaDoChip, fundoDoChip({})),
     'chip escolhido sobre o fundo': (fundoDoChip(escolhido), esquema.surface),
     'ícone de marcado sobre o chip escolhido': (chip.iconTheme!.color!, fundoDoChip(escolhido)),
-    // A marca é texto grande, e o "í" dela é a única coisa em âmbar que se lê.
-    'âmbar da marca sobre a cor principal': (ambarDaMarca, esquema.primary),
+    // A marca é texto grande, e o "í" dela é a única coisa em pêssego que se
+    // lê. O coral da paleta não serve aqui: sobre o verde, dá 1,9:1.
+    'pêssego da marca sobre a cor principal': (pessegoDaMarca, esquema.primary),
     'ícone principal sobre o contêiner principal (estado vazio, lembretes)': (esquema.primary, esquema.primaryContainer),
   };
 
@@ -80,6 +83,13 @@ void main() {
       expect(razaoDeContraste(borda, fundo), greaterThanOrEqualTo(3));
     });
   }
+
+  // A nota de informação e o retorno de sucesso não podem se confundir: com o
+  // verde como cor principal, o contêiner dela ficaria igual ao do sucesso.
+  test('a informação tem cores próprias, diferentes das do sucesso e do contêiner principal', () {
+    expect(retorno.informacao.fundo, isNot(retorno.sucesso.fundo));
+    expect(retorno.informacao.fundo, isNot(esquema.primaryContainer));
+  });
 
   test('área de toque mínima de 48 dp', () {
     expect(tema.materialTapTargetSize, MaterialTapTargetSize.padded);

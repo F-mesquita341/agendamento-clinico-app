@@ -1,24 +1,39 @@
 import 'package:flutter/material.dart';
 
-// As cores do aplicativo, definidas uma única vez (checklist, item 4.1). Vêm do
-// modelo visual (design/modelo/corrigido). As telas não usam estes valores:
-// leem do tema, por `Theme.of(context)`.
-const _ameixa = Color(0xFF6E2A5E);
-const _ameixaEscura = Color(0xFF4A1840);
-const _lilas = Color(0xFFF5E4EF);
+// As cores do aplicativo, definidas uma única vez (checklist, item 4.1). Na
+// versão 2, a cor principal passou do ameixa ao verde, para o aplicativo
+// lembrar saúde e cuidado; o fundo creme ficou. As telas não usam estes
+// valores: leem do tema, por `Theme.of(context)`.
+const _verde = Color(0xFF17694D);
+const _verdeEscuro = Color(0xFF0E4734);
+const _menta = Color(0xFFDDF0E6);
 const _fundo = Color(0xFFF8F4EE);
 const _branco = Color(0xFFFFFFFF);
-const _texto = Color(0xFF2B1E27);
-const _textoDeApoio = Color(0xFF64565F);
-const _borda = Color(0xFF8A7D84);
+const _texto = Color(0xFF1E2622);
+const _textoDeApoio = Color(0xFF56615B);
+const _borda = Color(0xFF7C8781);
 const _divisoria = Color(0xFFEADFD3);
 const _realce = Color(0xFFEFE7DD);
 const _erro = Color(0xFFA1261E);
 const _fundoDoErro = Color(0xFFFBE6E4);
 
-/// O âmbar da marca. É decoração — o "í" do nome, a arte da abertura — sempre
-/// sobre a cor principal. Não leva texto, e não serve sobre o fundo claro.
-const ambarDaMarca = Color(0xFFF2B544);
+/// O pêssego da marca. É decoração — o "í" do nome — sempre sobre a cor
+/// principal. Não leva texto, e não serve sobre o fundo
+/// claro. É o coral da paleta, clareado: o coral sobre o verde (1,9:1) some,
+/// também para quem não distingue vermelho de verde.
+const pessegoDaMarca = Color(0xFFFFC9B3);
+
+/// O fundo das iniciais de quem não tem foto, escolhido pelo nome. O branco
+/// por cima de cada uma passa de 4,5:1 (conferido em test/config/tema_test.dart).
+/// O ameixa da versão 1 ficou entre elas.
+const coresDosAvatares = [
+  Color(0xFF17694D),
+  Color(0xFF126B73),
+  Color(0xFF2B5C8A),
+  Color(0xFF6E2A5E),
+  Color(0xFF8A4B2B),
+  Color(0xFF4D5B1F),
+];
 
 /// A fonte do aplicativo, como declarada em pubspec.yaml. Foi desenhada para
 /// quem tem baixa visão: letras parecidas (I, l, 1; O, 0) têm formas distintas.
@@ -27,15 +42,17 @@ const familiaDaFonte = 'Atkinson Hyperlegible Next';
 /// Um fundo e o texto que vai sobre ele.
 typedef ParDeCores = ({Color fundo, Color texto});
 
-/// As cores de retorno que o Material não tem: sucesso e aviso. O erro e a
-/// informação já têm par no esquema de cores (`errorContainer` e
-/// `primaryContainer`).
+/// As cores de retorno que o Material não tem: sucesso e aviso, e a da
+/// informação que faz parte da tela (a `Nota`). O erro já tem par no esquema
+/// de cores (`errorContainer`). A informação tem o seu porque o contêiner da
+/// cor principal, verde-claro, ficaria igual ao sucesso.
 @immutable
 class CoresDeRetorno extends ThemeExtension<CoresDeRetorno> {
-  const CoresDeRetorno({required this.sucesso, required this.aviso});
+  const CoresDeRetorno({required this.sucesso, required this.aviso, required this.informacao});
 
   final ParDeCores sucesso;
   final ParDeCores aviso;
+  final ParDeCores informacao;
 
   // O aplicativo tem um tema só: não há outro para onde copiar ou transitar.
   @override
@@ -52,15 +69,15 @@ class CoresDeRetorno extends ThemeExtension<CoresDeRetorno> {
 /// campo aos 3:1, é conferido por teste (test/config/tema_test.dart).
 ThemeData temaDoApp() {
   // O que não é definido aqui continua derivado da cor principal.
-  final esquema = ColorScheme.fromSeed(seedColor: _ameixa).copyWith(
-    primary: _ameixa,
+  final esquema = ColorScheme.fromSeed(seedColor: _verde).copyWith(
+    primary: _verde,
     onPrimary: _branco,
-    primaryContainer: _lilas,
-    onPrimaryContainer: _ameixaEscura,
-    secondary: _ameixaEscura,
+    primaryContainer: _menta,
+    onPrimaryContainer: _verdeEscuro,
+    secondary: _verdeEscuro,
     onSecondary: _branco,
-    secondaryContainer: _lilas,
-    onSecondaryContainer: _ameixaEscura,
+    secondaryContainer: _menta,
+    onSecondaryContainer: _verdeEscuro,
     surface: _fundo,
     onSurface: _texto,
     onSurfaceVariant: _textoDeApoio,
@@ -90,6 +107,7 @@ ThemeData temaDoApp() {
       CoresDeRetorno(
         sucesso: (fundo: Color(0xFFE2F2E8), texto: Color(0xFF14492F)),
         aviso: (fundo: Color(0xFFFFEFD6), texto: Color(0xFF6B3A00)),
+        informacao: (fundo: Color(0xFFE1EEF3), texto: Color(0xFF12404F)),
       ),
     ],
     // Corpo de 16 e botões de 17: o texto do modelo é maior que o padrão do

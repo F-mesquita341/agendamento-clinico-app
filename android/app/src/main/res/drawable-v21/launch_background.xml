@@ -3,7 +3,7 @@
      mesmo fundo: sem o branco piscando entre as duas. Do Android 7 ao 11; no
      12 em diante, quem desenha é o sistema (values-v31/styles.xml). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/ameixa" />
+    <item android:drawable="@color/verde" />
     <item>
         <bitmap
             android:gravity="center"

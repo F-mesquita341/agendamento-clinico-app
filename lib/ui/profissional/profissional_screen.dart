@@ -11,6 +11,7 @@ import '../../domain/models/profissional.dart';
 import '../agendamento/etapa_do_agendamento.dart';
 import '../agendamento/resumo_screen.dart';
 import '../agendamento/resumo_view_model.dart';
+import '../busca/sugestoes.dart';
 import '../comum/atalhos_da_clinica.dart';
 import '../comum/avatar.dart';
 import '../comum/botoes.dart';
@@ -225,7 +226,14 @@ class _Cabecalho extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Semantics(header: true, child: Text(profissional.nome, style: tema.textTheme.headlineSmall)),
-              if (profissional.especialidade case final especialidade?) Text(especialidade.nome, style: apoio),
+              if (profissional.especialidade case final especialidade?)
+                Row(
+                  spacing: Espaco.pequeno / 2,
+                  children: [
+                    Icon(iconeDaEspecialidade(especialidade), size: 18, color: apoio.color),
+                    Flexible(child: Text(especialidade.nome, style: apoio)),
+                  ],
+                ),
               Text(profissional.registroConselho, style: tema.textTheme.bodySmall!.merge(apoio)),
             ],
           ),

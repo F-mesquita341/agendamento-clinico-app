@@ -219,5 +219,17 @@ void main() {
       );
       semantica.dispose();
     });
+
+    testWidgets('tem as cores da informação, e não as do sucesso nem as do contêiner verde', (tester) async {
+      await montar(tester, const Nota(icone: Icons.lock_clock, texto: 'O horário fica reservado.'));
+      final informacao = temaDoApp().extension<CoresDeRetorno>()!.informacao;
+
+      final caixa = tester.widget<Container>(
+        find.ancestor(of: find.text('O horário fica reservado.'), matching: find.byType(Container)).first,
+      );
+      expect((caixa.decoration! as BoxDecoration).color, informacao.fundo);
+      expect(tester.widget<Text>(find.text('O horário fica reservado.')).style!.color, informacao.texto);
+      expect(tester.widget<Icon>(find.byIcon(Icons.lock_clock)).color, informacao.texto);
+    });
   });
 }

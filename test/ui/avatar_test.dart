@@ -37,4 +37,24 @@ void main() {
     expect(iniciais.width, lessThanOrEqualTo(64));
     expect(iniciais.height, lessThan(32));
   });
+
+  group('cor', () {
+    // As contas de cada nome do seed, feitas à mão: a soma dos códigos das
+    // letras, módulo seis. Uma cor por hashCode, ou sempre a mesma, muda isto.
+    test('a mesma para o mesmo nome, e espalhada pelos profissionais do seed', () {
+      expect(corDoAvatar('Eduardo Parente Lima'), coresDosAvatares[0]);
+      expect(corDoAvatar('Carlos Eduardo Timbó'), coresDosAvatares[1]);
+      expect(corDoAvatar('Daniela Rocha Vieira'), coresDosAvatares[3]);
+      expect(corDoAvatar('Ana Beatriz Nogueira'), coresDosAvatares[5]);
+      expect(corDoAvatar(' Carlos Eduardo Timbó '), corDoAvatar('Carlos Eduardo Timbó'));
+    });
+
+    testWidgets('o círculo usa a cor do nome', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: temaDoApp(),
+        home: const Scaffold(body: AvatarDeIniciais(nome: 'Daniela Rocha Vieira', tamanho: 56)),
+      ));
+      expect(tester.widget<CircleAvatar>(find.byType(CircleAvatar)).backgroundColor, coresDosAvatares[3]);
+    });
+  });
 }

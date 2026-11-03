@@ -6,6 +6,7 @@ import '../../data/repositories/repositorio_do_consentimento.dart';
 import '../../data/repositories/repositorio_do_paciente.dart';
 import '../cadastro/formulario_do_paciente_screen.dart';
 import '../cadastro/formulario_do_paciente_view_model.dart';
+import '../comum/coracao.dart';
 import '../comum/espaco.dart';
 import '../comum/estados_de_carga.dart';
 import '../comum/marca.dart';
@@ -190,6 +191,8 @@ class _Iniciando extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const CoracaoComBatimento(tamanho: 72),
+                const SizedBox(height: Espaco.medio),
                 const Marca(tamanho: 56),
                 const SizedBox(height: Espaco.maior),
                 CircularProgressIndicator(color: cores.onPrimary, semanticsLabel: Textos.carregando),

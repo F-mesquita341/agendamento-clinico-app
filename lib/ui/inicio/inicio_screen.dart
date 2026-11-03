@@ -110,7 +110,7 @@ class InicioScreen extends StatelessWidget {
                 for (final especialidade in busca.especialidades)
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: Espaco.margem),
-                    leading: const Icon(Icons.medical_services_outlined),
+                    leading: Icon(iconeDaEspecialidade(especialidade)),
                     title: Text(especialidade.nome),
                     subtitle: switch (apoioDaEspecialidade(especialidade)) {
                       final apoio? => Text(comInicialMaiuscula(apoio)),

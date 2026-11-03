@@ -2,6 +2,6 @@
 <resources>
     <!-- A cor principal do tema (lib/config/tema.dart): o fundo do ícone e da
          abertura do Android, e a cor do ícone do lembrete. -->
-    <color name="ameixa">#6E2A5E</color>
-    <color name="cor_da_notificacao">@color/ameixa</color>
+    <color name="verde">#17694D</color>
+    <color name="cor_da_notificacao">@color/verde</color>
 </resources>

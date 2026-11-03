@@ -1,5 +1,6 @@
 import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/ui/comum/botoes.dart';
+import 'package:agendamento_clinico/ui/comum/coracao.dart';
 import 'package:agendamento_clinico/ui/comum/estados_de_carga.dart';
 import 'package:agendamento_clinico/ui/comum/marca.dart';
 import 'package:agendamento_clinico/ui/comum/retorno.dart';
@@ -216,6 +217,40 @@ void main() {
 
       expect(saiu, isTrue);
       expect(find.text('Tentar de novo'), findsOneWidget);
+    });
+  });
+
+  group('coração com batimento', () {
+    // A linha precisa ser transparente, e não pintada com a cor do fundo: é
+    // a transparência que a camada monocromática do ícone (ícones temáticos
+    // do Android 13) usa, e uma linha pintada sumiria nela.
+    testWidgets('a linha do batimento é recortada, e o coração em volta dela é cheio', (tester) async {
+      final chave = GlobalKey();
+      await tester.pumpWidget(Center(
+        child: RepaintBoundary(key: chave, child: const CoracaoComBatimento(tamanho: 100)),
+      ));
+
+      final pixels = await tester.runAsync(() async {
+        final limite = chave.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final imagem = await limite.toImage();
+        return (await imagem.toByteData())!;
+      });
+      int alfa(int x, int y) => pixels!.getUint8((y * 100 + x) * 4 + 3);
+
+      // O desenho tem 100 × 87 e desce 3,5 para ficar no meio: a parte reta
+      // da linha está na altura 50,5, dentro do coração.
+      expect(alfa(15, 50), 0, reason: 'a linha, dentro do coração');
+      expect(alfa(28, 28), 255, reason: 'o coração, acima da linha');
+      expect(alfa(50, 80), 255, reason: 'o coração, abaixo da linha');
+      expect(alfa(2, 90), 0, reason: 'fora do coração');
+    });
+
+    testWidgets('é decoração: nada para o leitor de tela na espera inicial', (tester) async {
+      final semantica = tester.ensureSemantics();
+      await montar(tester, const CoracaoComBatimento(tamanho: 72));
+
+      expect(tester.semantics.find(find.byType(Scaffold)).getSemanticsData().label, isEmpty);
+      semantica.dispose();
     });
   });
 

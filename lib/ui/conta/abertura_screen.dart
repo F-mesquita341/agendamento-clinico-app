@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../config/tema.dart';
 import '../comum/botoes.dart';
+import '../comum/coracao.dart';
 import '../comum/espaco.dart';
 import '../comum/marca.dart';
 import 'criar_conta_screen.dart';
@@ -105,8 +105,8 @@ class AberturaScreen extends StatelessWidget {
   }
 }
 
-/// A paisagem da abertura: o sol em âmbar e três morros em tons da cor
-/// principal. É só decoração — fora da leitura de tela — e ocupa o espaço que
+/// A paisagem da abertura: o coração com batimento, branco, nascendo como um
+/// sol atrás de três morros em tons da cor principal. É só decoração — fora da leitura de tela — e ocupa o espaço que
 /// sobrar: sem altura, não desenha nada.
 class _Arte extends StatelessWidget {
   const _Arte({required this.principal});
@@ -132,7 +132,11 @@ class _Paisagem extends CustomPainter {
     if (a < 96) return;
     Paint tom(double escuro) => Paint()..color = Color.lerp(principal, Colors.black, escuro)!;
 
-    canvas.drawCircle(Offset(l - 133, a - 133), 75, Paint()..color = ambarDaMarca);
+    canvas
+      ..save()
+      ..translate(l - 208, a - 208);
+    const PintorDoCoracao(Colors.white).paint(canvas, const Size.square(150));
+    canvas.restore();
     canvas.drawOval(Rect.fromCenter(center: Offset(85, a), width: 250, height: 320), tom(0.29));
     canvas.drawOval(Rect.fromCenter(center: Offset(l - 75, a + 20), width: 210, height: 240), tom(0.16));
     canvas.drawOval(Rect.fromCenter(center: Offset(210, a + 22), width: 120, height: 140), tom(0.43));

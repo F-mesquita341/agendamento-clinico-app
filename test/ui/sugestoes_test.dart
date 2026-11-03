@@ -1,5 +1,6 @@
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/ui/busca/sugestoes.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // As especialidades da API publicada.
@@ -77,6 +78,22 @@ void main() {
     test('especialidade que não tem jeito comum cadastrado é achada pelo nome', () {
       const outras = [Especialidade(id: 9, nome: 'Fisioterapia')];
       expect(especialidadesSugeridas('fisio', outras).single.nome, 'Fisioterapia');
+    });
+  });
+
+  group('ícone da especialidade', () {
+    test('cada especialidade da API tem o seu, sem depender de acento nem de maiúscula', () {
+      IconData de(String nome) => iconeDaEspecialidade(Especialidade(id: 0, nome: nome));
+      expect(de('Cardiologia'), Icons.monitor_heart_outlined);
+      expect(de('Pediatria'), Icons.child_care);
+      expect(de('Ginecologia'), Icons.pregnant_woman);
+      expect(de('Clínica Geral'), Icons.medical_services_outlined);
+      expect(de('Dermatologia'), de('DERMATOLOGIA'));
+      expect(de('Dermatologia'), Icons.face_outlined);
+    });
+
+    test('a que não está no mapa fica com o genérico', () {
+      expect(iconeDaEspecialidade(const Especialidade(id: 0, nome: 'Neurologia')), Icons.medical_services_outlined);
     });
   });
 }
