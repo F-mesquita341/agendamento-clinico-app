@@ -1,5 +1,6 @@
 import '../../domain/models/checkout.dart';
 import '../../domain/models/consulta.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/pagina.dart';
 import '../services/api_client.dart';
 import 'leitura_json.dart';
@@ -7,12 +8,18 @@ import 'leitura_json.dart';
 /// As consultas do paciente. Interface, para as telas serem testadas com
 /// consultas em memória, sem rede.
 abstract interface class RepositorioDeConsultas {
-  /// Reserva o horário e devolve a consulta, aguardando o pagamento.
+  /// Reserva o horário e devolve a consulta: aguardando o pagamento, pelo
+  /// aplicativo, ou já confirmada, com o plano ([planoId]) ou na clínica.
   ///
   /// A [versao] é a que veio com o horário na grade. Se outra pessoa reservou
   /// nesse meio-tempo, a versão não confere, e a API recusa com a ação
   /// `recarregar_horarios` (lock otimista; TCC, Seção 3.8.3).
-  Future<Consulta> agendar({required int horarioId, required int versao});
+  Future<Consulta> agendar({
+    required int horarioId,
+    required int versao,
+    FormaDePagamento formaDePagamento = FormaDePagamento.app,
+    int? planoId,
+  });
 
   /// As consultas do paciente, uma página por vez, da que acontece mais
   /// adiante para a mais antiga — todos os status, canceladas inclusive. Cada
@@ -44,8 +51,21 @@ class RepositorioDeConsultasRemoto implements RepositorioDeConsultas {
   final ApiClient _api;
 
   @override
-  Future<Consulta> agendar({required int horarioId, required int versao}) async {
-    final corpo = await _api.post('/consultas', corpo: {'horarioId': horarioId, 'versao': versao});
+  Future<Consulta> agendar({
+    required int horarioId,
+    required int versao,
+    FormaDePagamento formaDePagamento = FormaDePagamento.app,
+    int? planoId,
+  }) async {
+    // Pelo aplicativo, o pedido é o de sempre, sem a forma: é o que a API de
+    // produção entende, e o que a v1 manda.
+    final pelaApp = formaDePagamento == FormaDePagamento.app;
+    final corpo = await _api.post('/consultas', corpo: {
+      'horarioId': horarioId,
+      'versao': versao,
+      if (!pelaApp) 'formaDePagamento': formaDePagamento.name,
+      if (!pelaApp) 'planoId': ?planoId,
+    });
     return lerObjeto(corpo, 'consulta', Consulta.fromJson);
   }
 

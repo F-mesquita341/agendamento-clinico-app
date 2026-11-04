@@ -8,6 +8,7 @@ import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/pagina.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
@@ -18,6 +19,7 @@ import 'package:agendamento_clinico/ui/consultas/consultas_view_model.dart';
 import 'package:agendamento_clinico/ui/consultas/detalhes_da_consulta_screen.dart';
 import 'package:agendamento_clinico/ui/consultas/detalhes_da_consulta_view_model.dart';
 import 'package:agendamento_clinico/ui/consultas/minhas_consultas_screen.dart';
+import 'package:agendamento_clinico/ui/consultas/regras_de_cancelamento.dart';
 import 'package:agendamento_clinico/ui/consultas/situacao_da_consulta.dart';
 import 'package:agendamento_clinico/ui/inicio/inicio_screen.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
@@ -420,6 +422,34 @@ void main() {
 
       expect(find.text('Abrir no mapa'), findsNothing);
       expect(find.text('Ligar para a clínica'), findsNothing);
+    });
+
+    testWidgets('cancelada por você, pelo plano: só "Você cancelou esta consulta.", sem falar em devolução', (
+      tester,
+    ) async {
+      final peloPlano = consultaNa(
+        amanha,
+        status: StatusDaConsulta.cancelada,
+        motivo: MotivoDoCancelamento.paciente,
+        formaDePagamento: FormaDePagamento.plano,
+      );
+      await montar(tester, abrirDetalhes: itemDe(peloPlano));
+
+      expect(find.text('Você cancelou esta consulta.'), findsOneWidget);
+      expect(find.textContaining('devolvido'), findsNothing);
+      // Pelo plano, o cartão não mostra valor.
+      expect(find.text('Valor da consulta'), findsNothing);
+    });
+
+    testWidgets('cancelar a confirmada na clínica: o diálogo não fala em devolução', (tester) async {
+      await montar(tester, abrirDetalhes: itemDe(consultaNa(amanha, formaDePagamento: FormaDePagamento.clinica)));
+
+      await tester.tap(botaoDoRodape('Cancelar consulta'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cancelar esta consulta?'), findsOneWidget);
+      expect(find.text(RegraDoCancelamento.horarioLivre), findsOneWidget);
+      expect(find.textContaining('devolvido'), findsNothing);
     });
 
     testWidgets('cancelar a confirmada: pergunta, cancela, diz "Consulta cancelada." e mostra a nota', (tester) async {

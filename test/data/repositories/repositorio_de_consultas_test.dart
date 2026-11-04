@@ -4,6 +4,7 @@ import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.d
 import 'package:agendamento_clinico/data/services/api_client.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -89,6 +90,98 @@ void main() {
       );
       await expectLater(consultas({'consulta': 'reservada'}, status: 201).agendar(horarioId: 7, versao: 3),
           respostaInesperada);
+    });
+  });
+
+  group('agendar, versão 2: a forma de pagamento', () {
+    test('pelo aplicativo, o pedido é o de sempre, sem a forma', () async {
+      await consultas({
+        'consulta': reservada,
+      }, status: 201).agendar(horarioId: 7, versao: 3, formaDePagamento: FormaDePagamento.app, planoId: 5);
+
+      expect(jsonDecode(pedidos.single.body), {'horarioId': 7, 'versao': 3});
+    });
+
+    test('com o plano, vão a forma e o plano', () async {
+      await consultas({
+        'consulta': reservada,
+      }, status: 201).agendar(horarioId: 7, versao: 3, formaDePagamento: FormaDePagamento.plano, planoId: 5);
+
+      expect(jsonDecode(pedidos.single.body), {'horarioId': 7, 'versao': 3, 'formaDePagamento': 'plano', 'planoId': 5});
+    });
+
+    test('na clínica, vai só a forma', () async {
+      await consultas({
+        'consulta': reservada,
+      }, status: 201).agendar(horarioId: 7, versao: 3, formaDePagamento: FormaDePagamento.clinica);
+
+      expect(jsonDecode(pedidos.single.body), {'horarioId': 7, 'versao': 3, 'formaDePagamento': 'clinica'});
+    });
+
+    test('lê a consulta já confirmada, com a forma e o plano', () async {
+      final consulta = await consultas({
+        'consulta': {
+          ...reservada,
+          'status': 'confirmada',
+          'reservaExpiraEm': null,
+          'formaDePagamento': 'plano',
+          'plano': {'id': 5, 'nome': 'Unimed'},
+        },
+      }, status: 201).agendar(horarioId: 7, versao: 3, formaDePagamento: FormaDePagamento.plano, planoId: 5);
+
+      expect(consulta.status, StatusDaConsulta.confirmada);
+      expect(consulta.reservaExpiraEm, isNull);
+      expect(consulta.formaDePagamento, FormaDePagamento.plano);
+      expect(consulta.plano?.nome, 'Unimed');
+    });
+
+    test('sem a forma — a API de produção —, ou com uma desconhecida, vale o aplicativo', () async {
+      final semForma = await consultas({'consulta': reservada}, status: 201).agendar(horarioId: 7, versao: 3);
+      expect(semForma.formaDePagamento, FormaDePagamento.app);
+      expect(semForma.plano, isNull);
+
+      final desconhecida = await consultas({
+        'consulta': {...reservada, 'formaDePagamento': 'pix'},
+      }, status: 201).agendar(horarioId: 7, versao: 3);
+      expect(desconhecida.formaDePagamento, FormaDePagamento.app);
+    });
+
+    test('forma ou plano com o tipo errado viram RESPOSTA_INESPERADA', () async {
+      for (final errado in <Map<String, Object?>>[
+        {'formaDePagamento': 1},
+        {'plano': 'Unimed'},
+        {
+          'plano': {'id': 5},
+        },
+      ]) {
+        await expectLater(
+          consultas({
+            'consulta': {...reservada, ...errado},
+          }, status: 201).agendar(horarioId: 7, versao: 3),
+          respostaInesperada,
+          reason: '$errado',
+        );
+      }
+    });
+
+    test('a recusa da forma chega como erro sem ação, com a mensagem da API', () async {
+      final repositorio = consultas({
+        'erro': {
+          'codigo': 'PLANO_NAO_ACEITO',
+          'mensagem': 'Este profissional não atende por esse plano. Escolha outro plano ou outra forma de pagamento.',
+          'acao': null,
+        },
+      }, status: 422);
+
+      await expectLater(
+        repositorio.agendar(horarioId: 7, versao: 3, formaDePagamento: FormaDePagamento.plano, planoId: 9),
+        throwsA(
+          isA<ErroDaApi>()
+              .having((e) => e.acao, 'acao', AcaoSugerida.nenhuma)
+              .having((e) => e.status, 'status', 422)
+              .having((e) => e.codigo, 'codigo', 'PLANO_NAO_ACEITO'),
+        ),
+      );
     });
   });
 

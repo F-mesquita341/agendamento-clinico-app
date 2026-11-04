@@ -72,7 +72,8 @@ void main() {
       expect(
         find.text('Você pode cancelar pelo aplicativo até o horário da consulta. Ao cancelar, o horário volta a '
             'ficar livre para outras pessoas, e o valor pago é devolvido integralmente. Se faltar sem cancelar, o '
-            'valor não é devolvido. Em caso de dúvida, ligue para a clínica: (88)\u00a03000-0000.'),
+            'valor não é devolvido. Consultas pelo plano de saúde ou pagas na clínica não têm valor a devolver. '
+            'Em caso de dúvida, ligue para a clínica: (88)\u00a03000-0000.'),
         findsOneWidget,
       );
 

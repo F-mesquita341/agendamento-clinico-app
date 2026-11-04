@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_de_consultas.dart';
 import '../../domain/models/consulta.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/instante.dart';
 import '../agendamento/cartao_da_consulta.dart';
 import '../agendamento/pagamento_screen.dart';
@@ -43,7 +44,8 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
 
   Future<void> _cancelar(BuildContext context, DetalhesDaConsultaViewModel vm) async {
     final confirmada = vm.consulta.status == StatusDaConsulta.confirmada;
-    if (!await confirmarCancelamento(context, confirmada: confirmada)) return;
+    final pagaPeloApp = vm.consulta.formaDePagamento == FormaDePagamento.app;
+    if (!await confirmarCancelamento(context, confirmada: confirmada, pagaPeloApp: pagaPeloApp)) return;
     final cancelou = await vm.cancelar();
     if (cancelou && context.mounted) mostrarRetorno(context, TipoDeRetorno.sucesso, 'Consulta cancelada.');
   }
@@ -79,8 +81,9 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
       CartaoDaConsulta(
         profissional: profissional,
         horario: horario,
-        // O valor que a API congelou ao reservar, e não o do profissional.
-        valorFormatado: consulta.valorFormatado,
+        // O valor que a API congelou ao reservar, e não o do profissional;
+        // nenhum pelo plano de saúde.
+        valorFormatado: valorAMostrar(consulta),
         hoje: vm.hoje,
       ),
       if (clinica != null) ...[
@@ -160,6 +163,10 @@ class DetalhesDaConsultaScreen extends StatelessWidget {
     return switch ((consulta.status, consulta.motivoDoCancelamento, consulta.reservaExpiraEm)) {
       (StatusDaConsulta.pendentePagamento, _, final prazo?) when vm.podePagar =>
         Nota(icone: Icons.lock_clock, texto: 'Seu horário fica reservado até ${horaNaClinica(prazo)}.'),
+      // Com o plano ou na clínica, nada foi pago pelo aplicativo (versão 2).
+      (StatusDaConsulta.cancelada, MotivoDoCancelamento.paciente, _)
+          when consulta.formaDePagamento != FormaDePagamento.app =>
+        const Nota(icone: Icons.info_outline, texto: 'Você cancelou esta consulta.'),
       (StatusDaConsulta.cancelada, MotivoDoCancelamento.paciente, _) => const Nota(
           icone: Icons.info_outline,
           texto: 'Você cancelou esta consulta. Se ela já estava paga, o valor é devolvido integralmente.',

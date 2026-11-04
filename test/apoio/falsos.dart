@@ -16,6 +16,7 @@ import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/paciente.dart';
 import 'package:agendamento_clinico/domain/models/pagina.dart';
@@ -268,14 +269,24 @@ class ConsultasFalso implements RepositorioDeConsultas {
   final Fila respostasDePagar;
   final Fila respostasDeCancelar;
   final pedidosDeAgendar = <({int horarioId, int versao})>[];
+
+  /// A forma e o plano de cada agendamento (versão 2), na mesma ordem de
+  /// [pedidosDeAgendar].
+  final formasDosAgendamentos = <({FormaDePagamento forma, int? planoId})>[];
   final pedidosDeMinhas = <int>[];
   final pedidosDeConsulta = <int>[];
   final pedidosDePagar = <int>[];
   final pedidosDeCancelar = <int>[];
 
   @override
-  Future<Consulta> agendar({required int horarioId, required int versao}) {
+  Future<Consulta> agendar({
+    required int horarioId,
+    required int versao,
+    FormaDePagamento formaDePagamento = FormaDePagamento.app,
+    int? planoId,
+  }) {
     pedidosDeAgendar.add((horarioId: horarioId, versao: versao));
+    formasDosAgendamentos.add((forma: formaDePagamento, planoId: planoId));
     return respostasDeAgendar.proxima<Consulta>();
   }
 

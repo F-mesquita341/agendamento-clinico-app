@@ -4,6 +4,7 @@ import '../../data/repositories/repositorio_de_consultas.dart';
 import '../../domain/models/consulta.dart';
 import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/defeitos.dart';
@@ -20,6 +21,14 @@ final class Reservada extends DesfechoDoResumo {
   final Consulta consulta;
 }
 
+/// A consulta já saiu confirmada — com o plano de saúde ou na clínica, sem
+/// pagamento pelo aplicativo (versão 2): segue para a confirmação.
+final class Confirmada extends DesfechoDoResumo {
+  const Confirmada(this.consulta);
+
+  final Consulta consulta;
+}
+
 /// Outra pessoa reservou o horário antes — o lock otimista da API percebeu
 /// pela versão (TCC, Seção 3.8.3). A grade recarrega e explica, com a mensagem
 /// da API.
@@ -29,15 +38,31 @@ final class Conflito extends DesfechoDoResumo {
   final ErroDaApi erro;
 }
 
-/// O resumo da consulta: o que vai ser reservado, e a reserva em si.
+/// O resumo da consulta: o que vai ser reservado, como vai ser pago, e a
+/// reserva em si.
+///
+/// A forma de pagamento (versão 2): quem só aceita o aplicativo não pergunta
+/// nada, como na v1. Com mais de uma forma, nenhuma vem marcada — a pessoa
+/// escolhe, e só então confirma.
 class ResumoViewModel extends ChangeNotifier {
   ResumoViewModel(
     this._consultas, {
     required this.profissional,
     required this.horario,
     required this.hoje,
+    int? planoPreferido,
     this.esperaAteAvisar = const Duration(seconds: 4),
-  });
+  }) {
+    final formas = formasOferecidas;
+    if (formas.length == 1) _forma = formas.single;
+    final planos = profissional.planos;
+    if (planos.length == 1) {
+      _planoId = planos.single.id;
+    } else if (planos.any((plano) => plano.id == planoPreferido)) {
+      // O plano escolhido no filtro da Busca, se este profissional o aceita.
+      _planoId = planoPreferido;
+    }
+  }
 
   /// Quantas páginas de consultas a conferência olha, no máximo. A reserva
   /// procurada é de um horário futuro, e a lista começa pelas mais adiante:
@@ -57,6 +82,8 @@ class ResumoViewModel extends ChangeNotifier {
   /// Depois deste tempo enviando, a tela avisa que o servidor está demorando.
   final Duration esperaAteAvisar;
 
+  FormaDePagamento? _forma;
+  int? _planoId;
   bool _enviando = false;
   String? _erro;
   late final _aviso = AvisoDeDemora(espera: esperaAteAvisar, aoMudar: _notificar);
@@ -68,6 +95,54 @@ class ResumoViewModel extends ChangeNotifier {
   bool _incerto = false;
 
   bool get enviando => _enviando;
+
+  /// As formas que a pessoa pode escolher, na ordem da API. O plano só entra
+  /// se o profissional tem algum plano cadastrado; sem nenhuma forma que
+  /// sirva, vale o aplicativo.
+  List<FormaDePagamento> get formasOferecidas {
+    final formas = [
+      for (final forma in profissional.formasDePagamento)
+        if (forma != FormaDePagamento.plano || profissional.planos.isNotEmpty) forma,
+    ];
+    return formas.isEmpty ? const [FormaDePagamento.app] : formas;
+  }
+
+  /// O resumo pergunta como pagar: quando há outra forma além do aplicativo.
+  bool get pergunta => !(formasOferecidas.length == 1 && formasOferecidas.single == FormaDePagamento.app);
+
+  /// A forma escolhida; null enquanto a pessoa não escolheu.
+  FormaDePagamento? get forma => _forma;
+
+  /// O plano escolhido, quando a forma é o plano.
+  int? get planoId => _planoId;
+
+  /// Dá para confirmar: há forma escolhida, e plano, quando a forma é o plano.
+  bool get podeConfirmar => _forma != null && (_forma != FormaDePagamento.plano || _planoId != null);
+
+  /// Pelo aplicativo, há a etapa do pagamento: três. Com o plano ou na
+  /// clínica, a consulta se confirma no resumo: duas. Antes de escolher,
+  /// conta a etapa do pagamento se ela é possível.
+  int get etapas {
+    final pagaPeloApp = _forma == null
+        ? formasOferecidas.contains(FormaDePagamento.app)
+        : _forma == FormaDePagamento.app;
+    return pagaPeloApp ? 3 : 2;
+  }
+
+  void escolherForma(FormaDePagamento forma) {
+    if (_enviando || forma == _forma || !formasOferecidas.contains(forma)) return;
+    _forma = forma;
+    // A recusa era da escolha anterior.
+    _erro = null;
+    _notificar();
+  }
+
+  void escolherPlano(int planoId) {
+    if (_enviando || planoId == _planoId) return;
+    _planoId = planoId;
+    _erro = null;
+    _notificar();
+  }
 
   /// Por que a última tentativa não reservou — a mensagem da API, quando ela
   /// recusou (checklist, item 5.8).
@@ -81,7 +156,7 @@ class ResumoViewModel extends ChangeNotifier {
   /// Chamado de novo antes de terminar, não faz nada: um toque a mais não pode
   /// reservar duas vezes (checklist, item 5.3).
   Future<DesfechoDoResumo?> confirmar() async {
-    if (_enviando) return null;
+    if (_enviando || !podeConfirmar) return null;
     _enviando = true;
     _erro = null;
     _notificar();
@@ -95,14 +170,20 @@ class ResumoViewModel extends ChangeNotifier {
   Future<DesfechoDoResumo?> _tentar() async {
     if (_incerto) {
       final (:achada, :falha) = await _procurarReserva();
-      if (achada != null) return Reservada(achada);
+      if (achada != null) return _desfechoDe(achada);
       if (falha != null) return _naoConfirmou(falha);
       // Não estava lá: a tentativa anterior não reservou, e pedir de novo é
       // seguro.
     }
 
     try {
-      return Reservada(await _consultas.agendar(horarioId: horario.id, versao: horario.versao));
+      final forma = _forma!;
+      return _desfechoDe(await _consultas.agendar(
+        horarioId: horario.id,
+        versao: horario.versao,
+        formaDePagamento: forma,
+        planoId: forma == FormaDePagamento.plano ? _planoId : null,
+      ));
     } on ErroDaApi catch (erro) {
       // Decide pela ação, nunca pelo código HTTP nem pelo texto.
       if (erro.acao == AcaoSugerida.recarregarHorarios) {
@@ -110,7 +191,7 @@ class ResumoViewModel extends ChangeNotifier {
         // ter sido a própria pessoa.
         if (_incerto) {
           final (:achada, :falha) = await _procurarReserva();
-          if (achada != null) return Reservada(achada);
+          if (achada != null) return _desfechoDe(achada);
           if (falha != null) return _naoConfirmou(falha);
         }
         return Conflito(erro);
@@ -126,6 +207,12 @@ class ResumoViewModel extends ChangeNotifier {
     }
   }
 
+  /// Confirmada já — plano ou clínica — vai à confirmação; aguardando o
+  /// pagamento, ao pagamento. Vale também para a consulta achada depois de
+  /// uma resposta perdida.
+  static DesfechoDoResumo _desfechoDe(Consulta consulta) =>
+      consulta.status == StatusDaConsulta.confirmada ? Confirmada(consulta) : Reservada(consulta);
+
   /// A API recebeu e recusou: com certeza não reservou.
   ///
   /// Todo o resto — sem conexão, prazo esgotado, resposta fora do formato,
@@ -138,7 +225,7 @@ class ResumoViewModel extends ChangeNotifier {
   Future<DesfechoDoResumo?> _semResposta(ErroDaApi erro) async {
     _incerto = true;
     final (:achada, :falha) = await _procurarReserva();
-    if (achada != null) return Reservada(achada);
+    if (achada != null) return _desfechoDe(achada);
     if (falha != null) return _naoConfirmou(falha);
     _erro = erro.mensagem;
     return null;

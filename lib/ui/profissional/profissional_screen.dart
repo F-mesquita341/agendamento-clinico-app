@@ -27,12 +27,19 @@ import 'horarios_view_model.dart';
 /// A tela de um profissional. O view model nasce na rota, e não na tela: o
 /// resumo da consulta volta para ela com o dia e o horário ainda escolhidos
 /// (checklist, item 3.1).
-Route<void> rotaDoProfissional(Profissional profissional, {DateTime Function() relogio = DateTime.now}) {
+///
+/// [planoPreferido] é o plano escolhido no filtro da Busca: o resumo o traz
+/// marcado, se o profissional o aceita (versão 2).
+Route<void> rotaDoProfissional(
+  Profissional profissional, {
+  DateTime Function() relogio = DateTime.now,
+  int? planoPreferido,
+}) {
   return MaterialPageRoute<void>(
     builder: (_) => ChangeNotifierProvider(
       create: (contexto) =>
           HorariosViewModel(contexto.read<RepositorioDoCatalogo>(), profissional, agora: relogio)..carregar(),
-      child: const ProfissionalScreen(),
+      child: ProfissionalScreen(planoPreferido: planoPreferido),
     ),
   );
 }
@@ -42,17 +49,20 @@ Route<void> rotaDoProfissional(Profissional profissional, {DateTime Function() r
 /// horário (5.10); os dias e os horários livres (1.6 e 5.2); e, fixo no
 /// rodapé, o que foi escolhido (6.1), com o "Continuar".
 class ProfissionalScreen extends StatelessWidget {
-  const ProfissionalScreen({super.key});
+  const ProfissionalScreen({super.key, this.planoPreferido});
+
+  /// O plano do filtro da Busca, que segue para o resumo.
+  final int? planoPreferido;
 
   /// Abre o resumo do horário escolhido. Sem horário, diz o que falta.
-  static Future<void> _continuar(BuildContext context, HorariosViewModel vm) async {
+  Future<void> _continuar(BuildContext context, HorariosViewModel vm) async {
     final horario = vm.horarioEscolhido;
     if (horario == null) {
       mostrarRetorno(context, TipoDeRetorno.aviso, 'Escolha um horário para continuar.');
       return;
     }
     final desfecho = await Navigator.of(context).push(
-      rotaDoResumo(vm.profissional, horario, hoje: vm.hoje, relogio: vm.relogio),
+      rotaDoResumo(vm.profissional, horario, hoje: vm.hoje, relogio: vm.relogio, planoPreferido: planoPreferido),
     );
     if (desfecho is Conflito && context.mounted) await _explicarConflito(context, vm, horario, desfecho.erro);
   }
@@ -60,7 +70,7 @@ class ProfissionalScreen extends StatelessWidget {
   /// O fallback do lock otimista (TCC, Seção 3.8.3; checklist, item 9.1): o
   /// horário sai da grade, a grade é recarregada, e só então a folha explica,
   /// com a mensagem da API e os horários livres mais próximos.
-  static Future<void> _explicarConflito(
+  Future<void> _explicarConflito(
     BuildContext context,
     HorariosViewModel vm,
     Horario perdido,
@@ -96,7 +106,12 @@ class ProfissionalScreen extends StatelessWidget {
     final dia = vm.diaEscolhido;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Escolher horário'), bottom: etapaDoAgendamento(context, 1)),
+      appBar: AppBar(title: const Text('Escolher horário'), bottom: etapaDoAgendamento(
+          context,
+          1,
+          // Sem o pagamento pelo aplicativo, não há a etapa do pagamento.
+          total: vm.profissional.formasDePagamento.contains(FormaDePagamento.app) ? etapasDoAgendamento : 2,
+        )),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: vm.atualizar,

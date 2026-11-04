@@ -5,6 +5,7 @@ import '../../config/tema.dart';
 import '../../data/services/abridor_de_links.dart';
 import '../../domain/models/consulta.dart';
 import '../../domain/models/data_civil.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/botoes.dart';
@@ -102,7 +103,7 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
       ),
       const SizedBox(height: Espaco.pequeno),
       Text(
-        'Recebemos a confirmação do pagamento.',
+        textoDaForma(consulta),
         textAlign: TextAlign.center,
         style: tema.textTheme.bodyLarge,
       ),
@@ -119,7 +120,7 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
       CartaoDaConsulta(
         profissional: profissional,
         horario: horario,
-        valorFormatado: consulta.valorFormatado,
+        valorFormatado: valorAMostrar(consulta),
         hoje: hoje,
       ),
       // Logo depois do cartão, como no modelo: o que acontece até a consulta.
@@ -181,3 +182,15 @@ class ConsultaConfirmadaScreen extends StatelessWidget {
     );
   }
 }
+
+/// Como a consulta vai ser paga, dito na confirmação: pelo aplicativo, o
+/// pagamento já foi confirmado; com o plano ou na clínica (versão 2), ele
+/// ainda vai acontecer, no dia.
+String textoDaForma(Consulta consulta) => switch (consulta.formaDePagamento) {
+      FormaDePagamento.app => 'Recebemos a confirmação do pagamento.',
+      FormaDePagamento.plano => switch (consulta.plano) {
+          final plano? => 'Pagamento pelo plano ${plano.nome}: a clínica confere o plano no dia. Leve a carteirinha.',
+          null => 'Pagamento pelo plano de saúde: a clínica confere o plano no dia. Leve a carteirinha.',
+        },
+      FormaDePagamento.clinica => 'O pagamento é feito na clínica, no dia da consulta.',
+    };

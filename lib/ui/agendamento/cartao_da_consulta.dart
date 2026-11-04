@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/models/consulta.dart';
 import '../../domain/models/data_civil.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/datas.dart';
@@ -23,8 +25,9 @@ class CartaoDaConsulta extends StatelessWidget {
   final Horario horario;
 
   /// No resumo, o valor do profissional; no pagamento, o que a API congelou na
-  /// consulta.
-  final String valorFormatado;
+  /// consulta. Nulo pelo plano de saúde (versão 2): a linha do valor some,
+  /// porque a consulta é acertada com o plano, na clínica.
+  final String? valorFormatado;
 
   /// Hoje, na clínica: decide o "Amanhã" e o ano.
   final DataCivil hoje;
@@ -58,17 +61,20 @@ class CartaoDaConsulta extends StatelessWidget {
               apoio: clinica.endereco,
             ),
           ],
-          const Divider(height: 1),
-          _LinhaDoCartao(
-            icone: Icons.payments_outlined,
-            chave: 'Valor da consulta',
-            valor: semQuebra(valorFormatado),
-          ),
+          if (valorFormatado case final valor?) ...[
+            const Divider(height: 1),
+            _LinhaDoCartao(icone: Icons.payments_outlined, chave: 'Valor da consulta', valor: semQuebra(valor)),
+          ],
         ],
       ),
     );
   }
 }
+
+/// O valor que o cartão mostra para uma consulta já feita: nenhum pelo plano
+/// de saúde, cuja consulta é acertada com o plano, na clínica (versão 2).
+String? valorAMostrar(Consulta consulta) =>
+    consulta.formaDePagamento == FormaDePagamento.plano ? null : consulta.valorFormatado;
 
 class _LinhaDoCartao extends StatelessWidget {
   const _LinhaDoCartao({required this.icone, required this.chave, required this.valor, this.apoio});

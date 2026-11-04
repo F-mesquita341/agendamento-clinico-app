@@ -1,6 +1,7 @@
 import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
 import 'package:agendamento_clinico/ui/consultas/situacao_da_consulta.dart';
@@ -45,6 +46,7 @@ Consulta consultaNa(
   MotivoDoCancelamento? motivo,
   DateTime? expiraEm,
   Profissional? profissional,
+  FormaDePagamento formaDePagamento = FormaDePagamento.app,
 }) =>
     Consulta(
       id: id,
@@ -55,6 +57,7 @@ Consulta consultaNa(
       reservaExpiraEm: expiraEm,
       horario: horario,
       profissional: profissional ?? timbo,
+      formaDePagamento: formaDePagamento,
     );
 
 /// O item da lista que as telas usam, a partir de uma consulta com o horário

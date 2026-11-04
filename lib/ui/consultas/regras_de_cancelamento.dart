@@ -20,8 +20,15 @@ abstract final class RegraDoCancelamento {
   /// O que acontece com o horário.
   static const horarioLivre = 'Ao cancelar, o horário volta a ficar livre para outras pessoas.';
 
-  /// O diálogo de cancelar uma consulta confirmada.
+  /// O diálogo de cancelar uma consulta confirmada, paga pelo aplicativo.
   static const aoCancelarConfirmada = '$horarioLivre O valor pago é devolvido integralmente.';
+
+  /// O diálogo de cancelar uma consulta pelo plano de saúde ou paga na clínica
+  /// (versão 2): não há valor a devolver, e o diálogo não fala em devolução.
+  static const aoCancelarSemPagamentoPeloApp = horarioLivre;
+
+  /// Para quem paga pelo plano ou na clínica, nas regras e no "Como funciona".
+  static const semValorADevolver = 'Consultas pelo plano de saúde ou pagas na clínica não têm valor a devolver.';
 
   /// O diálogo de cancelar uma reserva que aguarda o pagamento. Não diz "você
   /// não pagou": o pagamento pode estar a caminho, e a confirmação chegar
@@ -33,7 +40,7 @@ abstract final class RegraDoCancelamento {
   static String regras(String? telefone) =>
       'Você pode cancelar pelo aplicativo até o horário da consulta. Ao cancelar, o horário volta a ficar livre '
       'para outras pessoas, e o valor pago é devolvido integralmente. Se faltar sem cancelar, o valor não é '
-      'devolvido. ${switch (telefone) {
+      'devolvido. $semValorADevolver ${switch (telefone) {
         final telefone? => 'Em caso de dúvida, ligue para a clínica: ${semQuebra(telefone)}.',
         null => 'Em caso de dúvida, fale com a clínica.',
       }}';
@@ -41,10 +48,22 @@ abstract final class RegraDoCancelamento {
 
 /// Pergunta antes de cancelar (checklist, itens 3.4 e 5.7), dizendo o que
 /// acontece com o horário e com o valor. Devolve true só se a pessoa confirmou.
-Future<bool> confirmarCancelamento(BuildContext context, {required bool confirmada}) => confirmar(
+///
+/// Com o plano ou na clínica ([pagaPeloApp] falso), nada foi pago pelo
+/// aplicativo, e o diálogo não fala em devolução.
+Future<bool> confirmarCancelamento(
+  BuildContext context, {
+  required bool confirmada,
+  bool pagaPeloApp = true,
+}) =>
+    confirmar(
       context,
       titulo: 'Cancelar esta consulta?',
-      texto: confirmada ? RegraDoCancelamento.aoCancelarConfirmada : RegraDoCancelamento.aoCancelarAguardando,
+      texto: switch ((confirmada, pagaPeloApp)) {
+        (_, false) => RegraDoCancelamento.aoCancelarSemPagamentoPeloApp,
+        (true, true) => RegraDoCancelamento.aoCancelarConfirmada,
+        (false, true) => RegraDoCancelamento.aoCancelarAguardando,
+      },
       acao: 'Cancelar consulta',
       desistir: 'Manter consulta',
       destrutiva: true,

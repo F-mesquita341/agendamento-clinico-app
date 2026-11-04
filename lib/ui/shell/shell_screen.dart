@@ -125,7 +125,7 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
 
   /// Abre o profissional por cima da barra de baixo.
   void _abrir(BuildContext context, Profissional profissional) {
-    Navigator.of(context).push(rotaDoProfissional(profissional));
+    Navigator.of(context).push(rotaDoProfissional(profissional, planoPreferido: _busca.plano?.id));
   }
 
   @override

@@ -7,7 +7,9 @@ import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
+import 'package:agendamento_clinico/domain/models/plano.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
 import 'package:agendamento_clinico/ui/profissional/horarios_view_model.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
@@ -1104,6 +1106,22 @@ void main() {
       await montar(tester, horarios: [gradeComum]);
 
       expect(find.text('Etapa 1 de 3'), findsOneWidget);
+    });
+
+    testWidgets('sem pagamento pelo aplicativo (versão 2), são duas etapas', (tester) async {
+      final semApp = Profissional(
+        id: timbo.id,
+        nome: timbo.nome,
+        registroConselho: timbo.registroConselho,
+        valorFormatado: timbo.valorFormatado,
+        especialidade: timbo.especialidade,
+        clinica: timbo.clinica,
+        planos: const [Plano(id: 3, nome: 'Unimed')],
+        formasDePagamento: const [FormaDePagamento.plano, FormaDePagamento.clinica],
+      );
+      await montar(tester, horarios: [gradeComum], profissional: semApp);
+
+      expect(find.text('Etapa 1 de 2'), findsOneWidget);
     });
 
     testWidgets('"Continuar" sem horário diz o que falta, e não abre o resumo', (tester) async {

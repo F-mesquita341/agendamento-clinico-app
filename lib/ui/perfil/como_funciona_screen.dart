@@ -93,7 +93,8 @@ const perguntasFrequentes = <({String pergunta, String resposta})>[
     pergunta: 'Como funciona o pagamento?',
     resposta: 'Ao confirmar o resumo, o horário fica reservado para você por $minutosDeReserva minutos. O pagamento '
         'é feito na página do Mercado Pago, e a consulta fica confirmada quando o pagamento é confirmado. Nesta '
-        'versão de teste, nenhum valor real é cobrado.',
+        'versão de teste, nenhum valor real é cobrado. Alguns profissionais aceitam plano de saúde ou pagamento '
+        'na clínica: nesse caso, a consulta é confirmada na hora, sem pagamento pelo aplicativo.',
   ),
   (
     pergunta: 'Fechei a página de pagamento sem pagar. E agora?',
@@ -103,7 +104,8 @@ const perguntasFrequentes = <({String pergunta, String resposta})>[
   (
     pergunta: 'Como cancelo uma consulta?',
     resposta: 'Em Minhas consultas, abra a consulta e toque em Cancelar consulta. '
-        '${RegraDoCancelamento.horarioLivre} ${RegraDoCancelamento.devolucao}',
+        '${RegraDoCancelamento.horarioLivre} ${RegraDoCancelamento.devolucao} '
+        '${RegraDoCancelamento.semValorADevolver}',
   ),
   (
     pergunta: 'Posso trocar o horário de uma consulta?',

@@ -65,6 +65,10 @@ class ApiFalsa {
   /// O prazo da reserva, como o agendamento o devolveu.
   String? prazoDaReserva;
 
+  /// A forma de pagamento e o plano do último agendamento (versão 2).
+  String formaDaConsulta = 'app';
+  Map<String, Object?>? planoDaConsulta;
+
   /// A consulta 90 como a API a escreve; [completa], com o horário e o
   /// profissional, como a lista e o detalhe a trazem.
   Map<String, Object?> consulta90({bool completa = true, bool comPrazo = true}) => {
@@ -76,6 +80,8 @@ class ApiFalsa {
     'valorFormatado': 'R\$ 250,00',
     'reservaExpiraEm': comPrazo ? prazoDaReserva : null,
     'criadoEm': DateTime.now().toUtc().toIso8601String(),
+    // Na versão 2, toda consulta traz a forma e o plano; na produção, não.
+    if (versao2) ...{'formaDePagamento': formaDaConsulta, 'plano': planoDaConsulta},
     if (completa) ...{
       'horario': (grade()['horarios']! as List<Object?>).cast<Map<String, Object?>>().firstWhere(
         (h) => h['id'] == horarioReservado,
@@ -194,11 +200,20 @@ class ApiFalsa {
         return json(201, perfil());
       }(),
       'PATCH /pacientes/me' => json(200, perfil(nome: 'Ana Lima Sá')),
-      // A reserva do horário pedido, aguardando pagamento por 15 minutos.
+      // A reserva do horário pedido, aguardando pagamento por 15 minutos. Na
+      // versão 2, pelo plano ou na clínica, a consulta sai confirmada, sem prazo.
       'POST /consultas' => () {
-        horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int;
-        prazoDaReserva = DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String();
-        statusDaConsulta = 'pendente_pagamento';
+        final corpo = jsonDecode(pedido.body) as Map<String, Object?>;
+        horarioReservado = corpo['horarioId']! as int;
+        formaDaConsulta = versao2 ? (corpo['formaDePagamento'] as String? ?? 'app') : 'app';
+        final pelaApp = formaDaConsulta == 'app';
+        planoDaConsulta = switch (corpo['planoId']) {
+          3 => {'id': 3, 'nome': 'Unimed'},
+          4 => {'id': 4, 'nome': 'Hapvida'},
+          _ => null,
+        };
+        prazoDaReserva = pelaApp ? DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String() : null;
+        statusDaConsulta = pelaApp ? 'pendente_pagamento' : 'confirmada';
         motivoDaConsulta = null;
         return json(201, {'consulta': consulta90(completa: false)});
       }(),
@@ -672,6 +687,71 @@ void main() {
       await sessao(tester, autenticacao, ana);
       expect(outraApi.pedidosA('GET', '/profissionais').first.url.queryParameters, {'cidade': '1', 'pagina': '1'});
       expect(find.descendant(of: find.byType(SeletorDaCidade), matching: find.text('Quixadá, CE')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'o portão em miniatura da Etapa 21: pelo plano do filtro, confirmada na hora, sem pagamento, e no Início',
+    (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final api = ApiFalsa(temPerfil: true)..versao2 = true;
+      await montar(tester, autenticacao, api);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Buscar');
+
+      // O filtro Hapvida na busca, o cardiologista e as 14:30 de amanhã.
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('Hapvida')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+      await tester.pumpAndSettle();
+      // O perfil da versão 2 é mais alto: as 14:30 vêm para o meio da tela,
+      // longe do rodapé fixo.
+      await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(find.text('14:30'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('14:30').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+
+      // O resumo pergunta como pagar; pelo plano, o Hapvida do filtro já vem
+      // marcado, a etapa do pagamento sai da conta e o valor some.
+      expect(find.text('Como você vai pagar?'), findsOneWidget);
+      expect(find.text('Escolha como pagar'), findsOneWidget);
+      expect(find.text('Etapa 2 de 3'), findsOneWidget);
+      await tester.ensureVisible(find.text('Pelo plano de saúde'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pelo plano de saúde').hitTestable());
+      await tester.pumpAndSettle();
+      expect(find.text('Etapa 2 de 2'), findsOneWidget);
+      expect(find.text('Valor da consulta'), findsNothing);
+      await tester.tap(find.text('Confirmar consulta'));
+      await tester.pumpAndSettle();
+
+      // O pedido levou a forma e o plano; a API confirmou na hora, e não houve
+      // pagamento.
+      expect(jsonDecode(api.pedidosA('POST', '/consultas').single.body), {
+        'horarioId': 43,
+        'versao': 0,
+        'formaDePagamento': 'plano',
+        'planoId': 4,
+      });
+      expect(find.text('Consulta confirmada'), findsOneWidget);
+      expect(
+        find.text('Pagamento pelo plano Hapvida: a clínica confere o plano no dia. Leve a carteirinha.'),
+        findsOneWidget,
+      );
+      expect(find.text('Pagamento'), findsNothing);
+      expect(api.pedidosA('POST', '/consultas/90/pagamento'), isEmpty);
+
+      // Voltar leva ao Início, com a consulta confirmada.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(InicioScreen), findsOneWidget);
+      expect(find.text('Sua próxima consulta'), findsOneWidget);
+      expect(find.text('Confirmada'), findsOneWidget);
     },
   );
 
