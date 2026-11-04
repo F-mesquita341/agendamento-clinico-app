@@ -44,6 +44,8 @@ dependencies:
   # Versão fixa: a 16.7.1 já exige o firebase_core 4.15.1, e a 17, o 5.
   firebase_messaging: 16.7.0
   url_launcher: ^6.3.2
+  # Versão fixa: a 2.5.6 já exige o Flutter 3.41.
+  shared_preferences: 2.5.5
 
 dev_dependencies:
   flutter_test:

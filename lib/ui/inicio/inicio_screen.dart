@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../domain/models/instante.dart';
 import '../agendamento/pagamento_screen.dart';
 import '../busca/busca_view_model.dart';
+import '../busca/seletores.dart';
 import '../busca/sugestoes.dart';
 import '../comum/botoes.dart';
 import '../comum/datas.dart';
@@ -20,7 +21,8 @@ import '../shell/abas_do_shell.dart';
 /// Início: a reserva que espera o pagamento, com o caminho de volta a ela; a
 /// próxima consulta em destaque, com o endereço (checklist, itens 6.2 e 8.3);
 /// e, sem consulta nenhuma, o convite para agendar (8.8). Embaixo, o atalho
-/// da busca e as especialidades, com o nome comum de cada uma (2.7).
+/// da busca e as especialidades, com o nome comum de cada uma (2.7). No alto,
+/// a cidade da busca (versão 2): a mesma da aba Buscar.
 class InicioScreen extends StatelessWidget {
   const InicioScreen({super.key});
 
@@ -49,6 +51,10 @@ class InicioScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: Espaco.medio),
             children: [
+              ComMargem(
+                child: Align(alignment: AlignmentDirectional.centerStart, child: SeletorDaCidade(vm: busca)),
+              ),
+              const SizedBox(height: Espaco.pequeno),
               ComMargem(child: _AtalhoDaBusca(aoTocar: () => abas.mostrar(AbaDoShell.buscar))),
               const SizedBox(height: Espaco.grande),
               if (vm.demorando && vm.estado == EstadoDaCarga.pronto) ...[

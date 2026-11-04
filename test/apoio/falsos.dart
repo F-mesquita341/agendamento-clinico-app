@@ -7,9 +7,11 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.da
 import 'package:agendamento_clinico/data/repositories/repositorio_do_consentimento.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
+import 'package:agendamento_clinico/data/services/preferencias_do_aparelho.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
 import 'package:agendamento_clinico/data/services/servico_de_notificacoes.dart';
 import 'package:agendamento_clinico/domain/models/checkout.dart';
+import 'package:agendamento_clinico/domain/models/cidade.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
@@ -17,6 +19,7 @@ import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/paciente.dart';
 import 'package:agendamento_clinico/domain/models/pagina.dart';
+import 'package:agendamento_clinico/domain/models/plano.dart';
 import 'package:agendamento_clinico/domain/models/profissional.dart';
 
 /// Respostas de teste numa fila: cada chamada consome a próxima. Pode ser um
@@ -149,27 +152,62 @@ class ConsentimentoFalso implements RepositorioDoConsentimento {
 
 /// O catálogo em memória, com uma fila de respostas para cada pedido e o
 /// registro do que foi pedido.
+///
+/// Cidades e planos são da versão 2: sem fila, o catálogo responde que não há
+/// nenhum, como a API v1 responderia se tivesse as rotas — e os testes de
+/// antes da versão 2 seguem sem saber delas.
 class CatalogoFalso implements RepositorioDoCatalogo {
   CatalogoFalso({
     Iterable<Object?> especialidades = const [],
     Iterable<Object?> profissionais = const [],
     Iterable<Object?> horarios = const [],
+    Iterable<Object?>? cidades,
+    Iterable<Object?>? planos,
   })  : respostasDeEspecialidades = Fila(especialidades),
         respostasDeProfissionais = Fila(profissionais),
-        respostasDeHorarios = Fila(horarios);
+        respostasDeHorarios = Fila(horarios),
+        respostasDeCidades = cidades == null ? null : Fila(cidades),
+        respostasDePlanos = planos == null ? null : Fila(planos);
 
   final Fila respostasDeEspecialidades;
   final Fila respostasDeProfissionais;
   final Fila respostasDeHorarios;
+  final Fila? respostasDeCidades;
+  final Fila? respostasDePlanos;
   final pedidosDeProfissionais = <({int? especialidadeId, String? termo, int pagina})>[];
+
+  /// Os filtros da versão 2 de cada pedido de profissionais, na mesma ordem de
+  /// [pedidosDeProfissionais].
+  final filtrosDosPedidos = <({int? cidadeId, int? planoId})>[];
   final pedidosDeHorarios = <({int profissionalId, DataCivil ate})>[];
+  int pedidosDeCidades = 0;
+  int pedidosDePlanos = 0;
 
   @override
   Future<List<Especialidade>> especialidades() => respostasDeEspecialidades.proxima<List<Especialidade>>();
 
   @override
-  Future<Pagina<Profissional>> profissionais({int? especialidadeId, String? termo, int pagina = 1}) {
+  Future<List<Cidade>> cidades() {
+    pedidosDeCidades++;
+    return respostasDeCidades?.proxima<List<Cidade>>() ?? Future.value(const []);
+  }
+
+  @override
+  Future<List<Plano>> planos() {
+    pedidosDePlanos++;
+    return respostasDePlanos?.proxima<List<Plano>>() ?? Future.value(const []);
+  }
+
+  @override
+  Future<Pagina<Profissional>> profissionais({
+    int? especialidadeId,
+    String? termo,
+    int? cidadeId,
+    int? planoId,
+    int pagina = 1,
+  }) {
     pedidosDeProfissionais.add((especialidadeId: especialidadeId, termo: termo, pagina: pagina));
+    filtrosDosPedidos.add((cidadeId: cidadeId, planoId: planoId));
     return respostasDeProfissionais.proxima<Pagina<Profissional>>();
   }
 
@@ -177,6 +215,35 @@ class CatalogoFalso implements RepositorioDoCatalogo {
   Future<List<Horario>> horarios(int profissionalId, {required DataCivil ate}) {
     pedidosDeHorarios.add((profissionalId: profissionalId, ate: ate));
     return respostasDeHorarios.proxima<List<Horario>>();
+  }
+}
+
+/// As preferências do aparelho em memória. [erroAoLer] e [erroAoGuardar]
+/// simulam o armazenamento falhando.
+class PreferenciasFalsas implements PreferenciasDoAparelho {
+  PreferenciasFalsas({this.cidade});
+
+  int? cidade;
+  Object? erroAoLer;
+  Object? erroAoGuardar;
+  final guardadas = <int?>[];
+
+  /// Se preenchida, a leitura só termina quando o teste a completar — o
+  /// armazenamento do Android demorando, como num aparelho de verdade.
+  Completer<void>? leituraDemorada;
+
+  @override
+  Future<int?> cidadeEscolhida() async {
+    if (leituraDemorada case final espera?) await espera.future;
+    if (erroAoLer case final erro?) throw erro;
+    return cidade;
+  }
+
+  @override
+  Future<void> guardarCidade(int? cidadeId) async {
+    guardadas.add(cidadeId);
+    if (erroAoGuardar case final erro?) throw erro;
+    cidade = cidadeId;
   }
 }
 

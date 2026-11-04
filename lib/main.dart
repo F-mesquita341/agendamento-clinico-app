@@ -17,6 +17,8 @@ import 'data/services/abridor_de_links_do_aparelho.dart';
 import 'data/services/api_client.dart';
 import 'data/services/autenticacao_firebase.dart';
 import 'data/services/notificacoes_firebase.dart';
+import 'data/services/preferencias_do_aparelho.dart';
+import 'data/services/preferencias_shared.dart';
 import 'data/services/servico_de_autenticacao.dart';
 import 'data/services/servico_de_notificacoes.dart';
 import 'ui/comum/textos.dart';
@@ -36,6 +38,7 @@ Future<void> main() async {
     base: Uri.parse(urlDaApi),
     abridor: AbridorDeLinksDoAparelho(),
     notificacoes: NotificacoesFirebase(),
+    preferencias: PreferenciasShared(),
   ));
 }
 
@@ -50,6 +53,7 @@ class AplicativoDoPaciente extends StatefulWidget {
     required this.base,
     required this.abridor,
     required this.notificacoes,
+    required this.preferencias,
     this.lerArquivo,
   });
 
@@ -62,6 +66,9 @@ class AplicativoDoPaciente extends StatefulWidget {
 
   /// A permissão de notificações, o endereço do aparelho e os lembretes.
   final ServicoDeNotificacoes notificacoes;
+
+  /// O que fica guardado no aparelho: a cidade escolhida.
+  final PreferenciasDoAparelho preferencias;
 
   /// Os arquivos do pacote do aplicativo — o texto do termo.
   final Future<String> Function(String caminho)? lerArquivo;
@@ -123,6 +130,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
       providers: [
         Provider<ServicoDeAutenticacao>.value(value: widget.autenticacao),
         Provider<AbridorDeLinks>.value(value: widget.abridor),
+        Provider<PreferenciasDoAparelho>.value(value: widget.preferencias),
         Provider<RepositorioDoCatalogo>(create: (_) => RepositorioDoCatalogoRemoto(_api)),
         Provider<RepositorioDeConsultas>(create: (_) => RepositorioDeConsultasRemoto(_api)),
         Provider<RepositorioDoPaciente>(create: (_) => RepositorioDoPacienteRemoto(_api)),

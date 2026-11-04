@@ -11,10 +11,12 @@ import '../comum/estados_de_carga.dart';
 import '../comum/retorno.dart';
 import '../comum/textos.dart';
 import 'busca_view_model.dart';
+import 'seletores.dart';
 
 /// Buscar: as especialidades para escolher (checklist, item 6.3), o nome do
 /// profissional para digitar (6.4) e a lista com o valor da consulta à vista
-/// (5.10). A escolha de um profissional leva aos horários dele.
+/// (5.10). A escolha de um profissional leva aos horários dele. Na versão 2,
+/// também a cidade e o plano de saúde, cada um num seletor abaixo do campo.
 class BuscaScreen extends StatefulWidget {
   const BuscaScreen({super.key, required this.aoAbrir});
 
@@ -99,6 +101,16 @@ class _BuscaScreenState extends State<BuscaScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: Espaco.medio),
+              // Lado a lado; com o texto ampliado ou a tela estreita, um embaixo
+              // do outro.
+              ComMargem(
+                child: Wrap(
+                  spacing: Espaco.pequeno,
+                  runSpacing: Espaco.pequeno,
+                  children: [SeletorDaCidade(vm: vm), SeletorDoPlano(vm: vm)],
+                ),
+              ),
               if (vm.especialidades.isNotEmpty) ...[
                 const SizedBox(height: Espaco.medio),
                 _Especialidades(vm: vm),
@@ -169,6 +181,8 @@ class _BuscaScreenState extends State<BuscaScreen> {
                         child: CardDoProfissional(
                           profissional: profissional,
                           aoTocar: () => widget.aoAbrir(profissional),
+                          hoje: vm.hoje,
+                          mostrarCidade: vm.cidade == null,
                         ),
                       ),
                     if (vm.erroAoMostrarMais case final erro?) ...[
@@ -212,13 +226,29 @@ String _contagem(int total) => total == 1 ? '1 profissional' : '$total profissio
 /// Por que a lista veio vazia, com o que a pessoa pode fazer a respeito.
 String _razaoDoVazio(BuscaViewModel vm) {
   final especialidade = vm.especialidade?.nome;
-  return switch ((vm.termo, especialidade)) {
-    (final termo?, final nome?) =>
-      'Nenhum profissional de $nome com "$termo" no nome. Confira o nome digitado ou escolha outra especialidade.',
-    (final termo?, null) => 'Nenhum profissional com "$termo" no nome. Confira o nome digitado.',
-    (null, final nome?) => 'Ainda não há profissionais de $nome no aplicativo.',
-    (null, null) => 'Ainda não há profissionais no aplicativo.',
+  final plano = vm.plano?.nome;
+  final cidade = vm.cidade?.nome;
+  if (plano == null && cidade == null) {
+    return switch ((vm.termo, especialidade)) {
+      (final termo?, final nome?) =>
+        'Nenhum profissional de $nome com "$termo" no nome. Confira o nome digitado ou escolha outra especialidade.',
+      (final termo?, null) => 'Nenhum profissional com "$termo" no nome. Confira o nome digitado.',
+      (null, final nome?) => 'Ainda não há profissionais de $nome no aplicativo.',
+      (null, null) => 'Ainda não há profissionais no aplicativo.',
+    };
+  }
+  // Com plano ou cidade: uma frase só, com tudo o que a busca pediu, e a saída
+  // de quem filtra mais.
+  final quem = switch ((vm.termo, especialidade)) {
+    (final termo?, final nome?) => ' de $nome com "$termo" no nome',
+    (final termo?, null) => ' com "$termo" no nome',
+    (null, final nome?) => ' de $nome',
+    (null, null) => '',
   };
+  final aceita = plano == null ? '' : ' que aceite $plano';
+  final onde = cidade == null ? '' : ' em $cidade';
+  final saida = plano != null ? 'Tente outro plano, ou qualquer plano.' : 'Tente outra cidade, no alto da tela.';
+  return 'Nenhum profissional$quem$aceita$onde. $saida';
 }
 
 /// Os chips de especialidade, numa linha que rola para o lado.

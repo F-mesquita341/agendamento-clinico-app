@@ -40,3 +40,29 @@ class Horario {
   /// Antes do meio-dia, na clínica.
   bool get deManha => relogioDaClinica(inicio).hour < 12;
 }
+
+/// O primeiro horário livre de um profissional, como vem na busca. Só para
+/// mostrar: não traz a versão, e por isso não serve para agendar — quem
+/// agenda lê a grade de novo, no perfil.
+class ProximoHorario {
+  const ProximoHorario({required this.id, required this.inicio});
+
+  factory ProximoHorario.fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    if (id is! int) {
+      throw const FormatException('Próximo horário fora do formato esperado.');
+    }
+    return ProximoHorario(id: id, inicio: instanteDaApi(json['inicio']));
+  }
+
+  final int id;
+
+  /// Em UTC.
+  final DateTime inicio;
+
+  /// O dia, no calendário da clínica.
+  DataCivil get dia => DataCivil.naClinica(inicio);
+
+  /// "09:00", no horário da clínica.
+  String get hora => horaNaClinica(inicio);
+}

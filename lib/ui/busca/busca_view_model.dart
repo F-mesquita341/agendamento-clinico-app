@@ -3,25 +3,46 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/repositorio_do_catalogo.dart';
+import '../../data/services/preferencias_do_aparelho.dart';
+import '../../domain/models/cidade.dart';
 import '../../domain/models/clinica.dart';
+import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/especialidade.dart';
 import '../../domain/models/pagina.dart';
+import '../../domain/models/plano.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/defeitos.dart';
 import '../comum/estados_de_carga.dart';
 import 'sugestoes.dart';
 
-/// A busca de profissionais: os dois filtros — a especialidade e o texto —, a
-/// lista paginada que eles dão, e o estado de cada pedido.
+/// A busca de profissionais: os filtros — a especialidade, o texto, a cidade e
+/// o plano —, a lista paginada que eles dão, e o estado de cada pedido.
+///
+/// A cidade é onde a pessoa está, e não um filtro como os outros: fica
+/// guardada no aparelho de uma abertura para outra, e "Limpar filtros" não a
+/// tira. Cidades e planos vieram com a versão 2 da API; se as listas não
+/// vierem — a API de produção não as tem —, a busca segue sem eles.
 class BuscaViewModel extends ChangeNotifier {
   BuscaViewModel(
     this._catalogo, {
+    PreferenciasDoAparelho? preferencias,
+    this.relogio = DateTime.now,
     this.esperaAteAvisar = const Duration(seconds: 4),
     this.esperaAoDigitar = const Duration(milliseconds: 300),
-  });
+  }) : _preferencias = preferencias;
 
   final RepositorioDoCatalogo _catalogo;
+
+  /// Onde a cidade escolhida fica guardada. Sem ele, a escolha vale só
+  /// enquanto o aplicativo está aberto.
+  final PreferenciasDoAparelho? _preferencias;
+
+  /// O relógio que diz "hoje" e "amanhã" no próximo horário de cada card.
+  final DateTime Function() relogio;
+
+  /// Hoje, no calendário da clínica.
+  DataCivil get hoje => DataCivil.naClinica(relogio());
 
   /// Depois deste tempo carregando, a tela avisa que o servidor está demorando.
   final Duration esperaAteAvisar;
@@ -33,6 +54,12 @@ class BuscaViewModel extends ChangeNotifier {
   EstadoDaCarga _estado = EstadoDaCarga.carregando;
   List<Especialidade>? _especialidades;
   int? _especialidadeId;
+  List<Cidade>? _cidades;
+  int? _cidadeId;
+  List<Plano>? _planos;
+  int? _planoId;
+  bool _cidadeGuardadaLida = false;
+  bool _cidadeEscolhida = false;
   String _texto = '';
   String? _termo;
   List<Profissional> _profissionais = const [];
@@ -75,7 +102,22 @@ class BuscaViewModel extends ChangeNotifier {
 
   bool get textoCurto => _texto.trim().length == 1;
 
-  bool get temFiltro => _especialidadeId != null || _texto.trim().isNotEmpty;
+  /// As cidades para escolher. Vazia até a resposta, ou se ela não veio.
+  List<Cidade> get cidades => _cidades ?? const [];
+
+  /// A cidade escolhida, se ela está na lista; null é "Todas as cidades".
+  /// Enquanto a lista não vem, a cidade guardada não filtra: a tela não
+  /// teria como dizer qual é.
+  Cidade? get cidade => cidades.where((c) => c.id == _cidadeId).firstOrNull;
+
+  /// Os planos para escolher. Vazia até a resposta, ou se ela não veio.
+  List<Plano> get planos => _planos ?? const [];
+
+  /// O plano escolhido; null é "Qualquer plano".
+  Plano? get plano => planos.where((p) => p.id == _planoId).firstOrNull;
+
+  /// A cidade não conta: ela não é filtro, e "Limpar filtros" não a tira.
+  bool get temFiltro => _especialidadeId != null || _texto.trim().isNotEmpty || plano != null;
 
   /// Especialidades que o texto buscado parece procurar, fora a já escolhida.
   List<Especialidade> get sugestoes => [
@@ -111,8 +153,44 @@ class BuscaViewModel extends ChangeNotifier {
   bool get demorando => _aviso.demorando;
 
   /// Busca com os filtros de agora, trocando a lista. É a primeira carga e o
-  /// "Tentar de novo".
-  Future<void> carregar() => _buscar();
+  /// "Tentar de novo". Na primeira, antes de buscar, lê a cidade guardada:
+  /// a primeira lista já sai na cidade da pessoa.
+  Future<void> carregar() async {
+    if (!_cidadeGuardadaLida) {
+      _cidadeGuardadaLida = true;
+      final guardada = await _lerCidadeGuardada();
+      // Se a pessoa escolheu uma cidade enquanto a leitura demorava, vale a
+      // escolha dela.
+      if (!_cidadeEscolhida) _cidadeId = guardada;
+    }
+    return _buscar();
+  }
+
+  /// A pessoa escolheu a cidade: fica guardada, e a busca recomeça nela.
+  void escolherCidade(int? id) {
+    _cidadeEscolhida = true;
+    if (id == cidade?.id) return;
+    _cidadeId = id;
+    _guardarCidade(id);
+    _buscar();
+  }
+
+  void escolherPlano(int? id) {
+    if (id == plano?.id) return;
+    _planoId = id;
+    _buscar();
+  }
+
+  /// Pede de novo as listas de cidades e planos que não vieram — a tela chama
+  /// ao abrir a escolha. Se a cidade guardada passar a existir na lista, a
+  /// busca recomeça nela.
+  Future<void> tentarListasDeNovo() async {
+    if (_cidades != null && _planos != null) return;
+    final antes = cidade?.id;
+    await _carregarListas();
+    _notificar();
+    if (cidade?.id != antes) await _buscar();
+  }
 
   /// O texto do campo mudou. A busca espera a pessoa parar de digitar.
   void aoDigitar(String texto) {
@@ -129,8 +207,12 @@ class BuscaViewModel extends ChangeNotifier {
     _buscar();
   }
 
-  /// Volta a todos os profissionais. Quem mostra o campo de busca o esvazia.
-  void limparFiltros() => _ficarSoCom(null);
+  /// Volta a todos os profissionais da cidade: tira a especialidade, o texto
+  /// e o plano. Quem mostra o campo de busca o esvazia.
+  void limparFiltros() {
+    _planoId = null;
+    _ficarSoCom(null);
+  }
 
   /// Troca o texto digitado pela especialidade que ele procurava. Quem mostra
   /// o campo de busca o esvazia.
@@ -162,7 +244,7 @@ class BuscaViewModel extends ChangeNotifier {
     _aviso.esquecerPedidos();
     _notificar();
 
-    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1));
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1, listas: true));
     if (busca != _busca) return;
     _atualizando = false;
     if (pagina != null) {
@@ -211,7 +293,7 @@ class BuscaViewModel extends ChangeNotifier {
     _aviso.esquecerPedidos();
     _notificar();
 
-    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1));
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1, listas: true));
     if (busca != _busca) return;
     if (pagina != null) {
       _mostrar(pagina);
@@ -224,14 +306,22 @@ class BuscaViewModel extends ChangeNotifier {
   }
 
   /// Pede uma página com os filtros de agora — e, antes, as especialidades, se
-  /// ainda não vieram. Devolve a página, ou o erro que a tela mostra: nunca
-  /// lança, para nenhum pedido deixar a tela presa carregando.
-  Future<({Pagina<Profissional>? pagina, ErroDaApi? erro})> _pedir(int numero) async {
-    final especialidadeId = _especialidadeId;
-    final termo = _termo;
+  /// ainda não vieram, e, na primeira página, as cidades e os planos que
+  /// faltarem. Devolve a página, ou o erro que a tela mostra: nunca lança,
+  /// para nenhum pedido deixar a tela presa carregando.
+  Future<({Pagina<Profissional>? pagina, ErroDaApi? erro})> _pedir(int numero, {bool listas = false}) async {
     try {
       _especialidades ??= await _catalogo.especialidades();
-      final pagina = await _catalogo.profissionais(especialidadeId: especialidadeId, termo: termo, pagina: numero);
+      if (listas) await _carregarListas();
+      // Os filtros são lidos depois das listas: a cidade guardada só filtra
+      // se ela estiver na lista de cidades.
+      final pagina = await _catalogo.profissionais(
+        especialidadeId: _especialidadeId,
+        termo: _termo,
+        cidadeId: cidade?.id,
+        planoId: plano?.id,
+        pagina: numero,
+      );
       return (pagina: pagina, erro: null);
     } on ErroDaApi catch (erro) {
       return (pagina: null, erro: erro);
@@ -239,6 +329,53 @@ class BuscaViewModel extends ChangeNotifier {
       relatarDefeito(erro, pilha, 'ao buscar profissionais');
       return (pagina: null, erro: const ErroDaApi.falhaNoAplicativo());
     }
+  }
+
+  /// As cidades e os planos que ainda não vieram. Falhar aqui não falha a
+  /// busca: a lista que não veio fica para a próxima vez.
+  Future<void> _carregarListas() async {
+    if (_cidades == null) {
+      _cidades = await _listaOuNada(_catalogo.cidades, 'ao pedir as cidades');
+      // A cidade guardada saiu do catálogo: volta a valer "Todas as cidades".
+      if (_cidades != null && _cidadeId != null && cidade == null) {
+        _cidadeId = null;
+        _guardarCidade(null);
+      }
+    }
+    _planos ??= await _listaOuNada(_catalogo.planos, 'ao pedir os planos');
+  }
+
+  Future<List<T>?> _listaOuNada<T>(Future<List<T>> Function() pedir, String quando) async {
+    try {
+      return await pedir();
+    } on ErroDaApi {
+      return null;
+    } catch (erro, pilha) {
+      relatarDefeito(erro, pilha, quando);
+      return null;
+    }
+  }
+
+  /// A cidade guardada, ou null. Sem conseguir ler, a busca começa em "Todas
+  /// as cidades".
+  ///
+  /// O armazenamento do aparelho falhar não é defeito do aplicativo — como o
+  /// serviço de notificações sem o Google Play —: fica no log, e a busca
+  /// segue.
+  Future<int?> _lerCidadeGuardada() async {
+    try {
+      return await _preferencias?.cidadeEscolhida();
+    } catch (erro) {
+      debugPrint('Não deu para ler a cidade guardada: $erro');
+      return null;
+    }
+  }
+
+  /// Guardar a cidade nunca segura a tela: a busca não espera, e uma falha só
+  /// faz a escolha não sobreviver a uma nova abertura.
+  void _guardarCidade(int? id) {
+    final guardando = _preferencias?.guardarCidade(id);
+    guardando?.catchError((Object erro) => debugPrint('Não deu para guardar a cidade: $erro'));
   }
 
   void _mostrar(Pagina<Profissional> pagina, {List<Profissional> depois = const []}) {

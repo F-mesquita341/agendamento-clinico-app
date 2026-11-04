@@ -1207,6 +1207,9 @@ void main() {
       await tocarNoChip(tester, 'Cardiologia');
       await buscarPor(tester, 'cardio');
       // A contagem e limpar filtros dividem a linha, e quebram quando não cabem.
+      // Com os seletores da cidade e do plano em cima (Etapa 20), a linha fica
+      // abaixo da tela: a lista só constrói o que está perto dela.
+      await rolarAte(tester, find.text('Limpar filtros'));
       expect(find.text('Limpar filtros'), findsOneWidget);
       await rolarAte(tester, find.text('Mostrar mais profissionais'));
 

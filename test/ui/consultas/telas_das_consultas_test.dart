@@ -23,6 +23,7 @@ import 'package:agendamento_clinico/ui/inicio/inicio_screen.dart';
 import 'package:agendamento_clinico/ui/profissional/profissional_screen.dart';
 import 'package:agendamento_clinico/ui/shell/abas_do_shell.dart';
 import 'package:flutter/material.dart';
+import 'package:agendamento_clinico/ui/busca/seletores.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -207,6 +208,17 @@ void main() {
       await tester.pump();
       expect(abas.aba, AbaDoShell.buscar);
       expect(catalogo.pedidosDeProfissionais.last, (especialidadeId: 2, termo: null, pagina: 1));
+    });
+
+    testWidgets('a cidade da busca no alto, antes do atalho da busca (Etapa 20)', (tester) async {
+      await montar(tester, aba: const InicioScreen(), minhas: [pagina([])]);
+
+      expect(find.byType(SeletorDaCidade), findsOneWidget);
+      expect(find.text('Todas as cidades'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byType(SeletorDaCidade)).dy,
+        lessThan(tester.getTopLeft(find.text('Buscar profissional ou especialidade')).dy),
+      );
     });
 
     testWidgets('a lista que não carrega: a mensagem e "Tentar de novo"', (tester) async {

@@ -14,6 +14,7 @@ import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:agendamento_clinico/ui/cadastro/formulario_do_paciente_screen.dart';
 import 'package:agendamento_clinico/ui/busca/busca_screen.dart';
+import 'package:agendamento_clinico/ui/busca/seletores.dart';
 import 'package:agendamento_clinico/ui/comum/card_do_profissional.dart';
 import 'package:agendamento_clinico/ui/comum/chip_de_escolha.dart';
 import 'package:agendamento_clinico/ui/comum/marca.dart';
@@ -47,6 +48,10 @@ class ApiFalsa {
   bool temPerfil;
   String versaoDoTermo;
 
+  /// A API da versão 2 (a homologação): cidades, planos, os filtros e os campos
+  /// novos do profissional. Sem ela, é a de produção, que não tem nada disso.
+  bool versao2 = false;
+
   /// O status da consulta 90 no detalhe: o teste o muda quando o "Mercado
   /// Pago" confirma o pagamento.
   String statusDaConsulta = 'pendente_pagamento';
@@ -63,21 +68,21 @@ class ApiFalsa {
   /// A consulta 90 como a API a escreve; [completa], com o horário e o
   /// profissional, como a lista e o detalhe a trazem.
   Map<String, Object?> consulta90({bool completa = true, bool comPrazo = true}) => {
-        'id': 90,
-        'status': statusDaConsulta,
-        'motivoCancelamento': motivoDaConsulta,
-        'horarioId': horarioReservado,
-        'valorCentavos': 25000,
-        'valorFormatado': 'R\$ 250,00',
-        'reservaExpiraEm': comPrazo ? prazoDaReserva : null,
-        'criadoEm': DateTime.now().toUtc().toIso8601String(),
-        if (completa) ...{
-          'horario': (grade()['horarios']! as List<Object?>)
-              .cast<Map<String, Object?>>()
-              .firstWhere((h) => h['id'] == horarioReservado),
-          'profissional': cardiologista,
-        },
-      };
+    'id': 90,
+    'status': statusDaConsulta,
+    'motivoCancelamento': motivoDaConsulta,
+    'horarioId': horarioReservado,
+    'valorCentavos': 25000,
+    'valorFormatado': 'R\$ 250,00',
+    'reservaExpiraEm': comPrazo ? prazoDaReserva : null,
+    'criadoEm': DateTime.now().toUtc().toIso8601String(),
+    if (completa) ...{
+      'horario': (grade()['horarios']! as List<Object?>).cast<Map<String, Object?>>().firstWhere(
+        (h) => h['id'] == horarioReservado,
+      ),
+      'profissional': cardiologista,
+    },
+  };
   final pedidos = <http.Request>[];
 
   /// Respostas forçadas, por "MÉTODO /caminho", consumidas uma vez.
@@ -88,16 +93,16 @@ class ApiFalsa {
   final esperas = <String, Completer<void>>{};
 
   Map<String, Object?> perfil({String nome = 'Ana Lima'}) => {
-        'paciente': {
-          'id': 7,
-          'nome': nome,
-          'email': 'ana@exemplo.test',
-          'telefone': '88999990000',
-          'dataNascimento': '1990-03-15',
-          // 22:30 do dia 6 em Quixadá: em UTC, já é dia 7.
-          'consentimento': {'versao': '2026-09-v2', 'aceitoEm': '2026-10-07T01:30:00.000Z'},
-        },
-      };
+    'paciente': {
+      'id': 7,
+      'nome': nome,
+      'email': 'ana@exemplo.test',
+      'telefone': '88999990000',
+      'dataNascimento': '1990-03-15',
+      // 22:30 do dia 6 em Quixadá: em UTC, já é dia 7.
+      'consentimento': {'versao': '2026-09-v2', 'aceitoEm': '2026-10-07T01:30:00.000Z'},
+    },
+  };
 
   static const cardiologista = {
     'id': 2,
@@ -114,12 +119,43 @@ class ApiFalsa {
     },
   };
 
+  /// O cardiologista como a API da versão 2 o escreve: em Quixadá, com dois
+  /// planos e o primeiro horário livre da grade.
+  static Map<String, Object?> cardiologistaV2() => {
+    ...cardiologista,
+    'clinica': {
+      ...(cardiologista['clinica']! as Map<String, Object?>),
+      'cidade': {'id': 1, 'nome': 'Quixadá', 'uf': 'CE'},
+      'latitude': -4.9708,
+      'longitude': -39.0153,
+    },
+    'planos': [
+      {'id': 3, 'nome': 'Unimed'},
+      {'id': 4, 'nome': 'Hapvida'},
+    ],
+    'formasDePagamento': ['app', 'plano'],
+    'proximoHorario': {
+      'id': 41,
+      'inicio': (grade()['horarios']! as List<Object?>).cast<Map<String, Object?>>().first['inicio'],
+    },
+  };
+
+  /// A lista de profissionais. Na versão 2, com os filtros de cidade e de plano
+  /// como a API os aplica: o cardiologista é de Quixadá (1) e aceita 3 e 4.
+  http.Response profissionais(Map<String, String> consulta) {
+    final passa = !versao2 || ((consulta['cidade'] ?? '1') == '1' && ['3', '4'].contains(consulta['plano'] ?? '3'));
+    return json(200, {
+      'profissionais': [if (passa) versao2 ? cardiologistaV2() : cardiologista],
+      'paginacao': {'pagina': 1, 'limite': 20, 'total': passa ? 1 : 0, 'paginas': passa ? 1 : 0},
+    });
+  }
+
   static http.Response json(int status, Object corpo) =>
       http.Response.bytes(utf8.encode(jsonEncode(corpo)), status, headers: {'content-type': 'application/json'});
 
   static Map<String, Object?> erro(String codigo, String mensagem, [String? acao]) => {
-        'erro': {'codigo': codigo, 'mensagem': mensagem, 'acao': acao},
-      };
+    'erro': {'codigo': codigo, 'mensagem': mensagem, 'acao': acao},
+  };
 
   late final cliente = MockClient((pedido) async {
     pedidos.add(pedido);
@@ -128,61 +164,71 @@ class ApiFalsa {
     if (forcadas.remove(rota) case final resposta?) return resposta;
     return switch (rota) {
       'GET /especialidades' => json(200, {
-          'especialidades': [
-            {'id': 1, 'nome': 'Cardiologia'},
-          ],
-        }),
-      'GET /profissionais' => json(200, {
-          'profissionais': [cardiologista],
-          'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
-        }),
+        'especialidades': [
+          {'id': 1, 'nome': 'Cardiologia'},
+        ],
+      }),
+      'GET /profissionais' => profissionais(pedido.url.queryParameters),
+      'GET /cidades' when versao2 => json(200, {
+        'cidades': [
+          {'id': 3, 'nome': 'Fortaleza', 'uf': 'CE'},
+          {'id': 1, 'nome': 'Quixadá', 'uf': 'CE'},
+        ],
+      }),
+      'GET /planos' when versao2 => json(200, {
+        'planos': [
+          {'id': 4, 'nome': 'Hapvida'},
+          {'id': 3, 'nome': 'Unimed'},
+        ],
+      }),
       'GET /profissionais/2/horarios' => json(200, grade()),
       'GET /consentimento/termo-vigente' => json(200, {
-          'termo': {'versao': versaoDoTermo},
-        }),
-      'GET /pacientes/me' => temPerfil
-          ? json(200, perfil())
-          : json(404, erro('PERFIL_NAO_CADASTRADO', 'Complete seu cadastro para continuar.', 'completar_cadastro')),
+        'termo': {'versao': versaoDoTermo},
+      }),
+      'GET /pacientes/me' =>
+        temPerfil
+            ? json(200, perfil())
+            : json(404, erro('PERFIL_NAO_CADASTRADO', 'Complete seu cadastro para continuar.', 'completar_cadastro')),
       'POST /pacientes' => () {
-          temPerfil = true;
-          return json(201, perfil());
-        }(),
+        temPerfil = true;
+        return json(201, perfil());
+      }(),
       'PATCH /pacientes/me' => json(200, perfil(nome: 'Ana Lima Sá')),
       // A reserva do horário pedido, aguardando pagamento por 15 minutos.
       'POST /consultas' => () {
-          horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int;
-          prazoDaReserva = DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String();
-          statusDaConsulta = 'pendente_pagamento';
-          motivoDaConsulta = null;
-          return json(201, {'consulta': consulta90(completa: false)});
-        }(),
+        horarioReservado = (jsonDecode(pedido.body) as Map<String, Object?>)['horarioId']! as int;
+        prazoDaReserva = DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String();
+        statusDaConsulta = 'pendente_pagamento';
+        motivoDaConsulta = null;
+        return json(201, {'consulta': consulta90(completa: false)});
+      }(),
       // A página de pagamento, em ambiente de teste.
       'POST /consultas/90/pagamento' => json(201, {
-          'pagamento': {
-            'status': 'aberto',
-            'checkoutUrl': 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=teste',
-            'expiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
-            'valorCentavos': 25000,
-            'valorFormatado': 'R\$ 250,00',
-          },
-        }),
+        'pagamento': {
+          'status': 'aberto',
+          'checkoutUrl': 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=teste',
+          'expiraEm': DateTime.now().toUtc().add(const Duration(minutes: 15)).toIso8601String(),
+          'valorCentavos': 25000,
+          'valorFormatado': 'R\$ 250,00',
+        },
+      }),
       // A consulta como a API a tem: o status é o que o teste disser.
       'GET /consultas/90' => json(200, {'consulta': consulta90(comPrazo: false)}),
       // As consultas do paciente: a 90, depois de reservada.
       'GET /consultas' => json(200, {
-          'consultas': [if (horarioReservado != 0) consulta90()],
-          'paginacao': {'pagina': 1, 'limite': 20, 'total': horarioReservado != 0 ? 1 : 0, 'paginas': 1},
-        }),
+        'consultas': [if (horarioReservado != 0) consulta90()],
+        'paginacao': {'pagina': 1, 'limite': 20, 'total': horarioReservado != 0 ? 1 : 0, 'paginas': 1},
+      }),
       // O cancelamento, como a API o responde: sem o horário nem o profissional.
       'PATCH /consultas/90/cancelamento' => () {
-          statusDaConsulta = 'cancelada';
-          motivoDaConsulta = 'paciente';
-          return json(200, {'consulta': consulta90(completa: false)});
-        }(),
+        statusDaConsulta = 'cancelada';
+        motivoDaConsulta = 'paciente';
+        return json(200, {'consulta': consulta90(completa: false)});
+      }(),
       // O aparelho, nos lembretes: o mesmo token, o mesmo id.
       'POST /dispositivos' => json(201, {
-          'dispositivo': {'id': 12},
-        }),
+        'dispositivo': {'id': 12},
+      }),
       'DELETE /dispositivos/12' => http.Response('', 204),
       _ => json(404, erro('ROTA_NAO_ENCONTRADA', 'Não existe $rota nesta API.')),
     };
@@ -200,13 +246,14 @@ class ApiFalsa {
       'periodo': {'de': DateTime.now().toUtc().toIso8601String(), 'ate': instante(21, 0)},
       'horarios': [
         for (final (id, hora, minuto) in [(41, 9, 0), (42, 10, 30), (43, 14, 30)])
-          if (!tirar.contains(id)) {
-            'id': id,
-            'inicio': instante(hora, minuto),
-            'fim': instante(hora, minuto + 30),
-            'duracaoMinutos': 30,
-            'versao': 0,
-          },
+          if (!tirar.contains(id))
+            {
+              'id': id,
+              'inicio': instante(hora, minuto),
+              'fim': instante(hora, minuto + 30),
+              'duracaoMinutos': 30,
+              'versao': 0,
+            },
       ],
     };
   }
@@ -221,16 +268,20 @@ Future<void> montar(
   ApiFalsa api, {
   AbridorDeLinksFalso? abridor,
   NotificacoesFalsas? notificacoes,
+  PreferenciasFalsas? preferencias,
 }) async {
-  await tester.pumpWidget(AplicativoDoPaciente(
-    autenticacao: autenticacao,
-    cliente: api.cliente,
-    base: Uri.parse('https://api.exemplo.test'),
-    abridor: abridor ?? AbridorDeLinksFalso(),
-    // Sem nada dito, como numa instalação nova no Android 13: sem a permissão.
-    notificacoes: notificacoes ?? NotificacoesFalsas(),
-    lerArquivo: lerDoDisco,
-  ));
+  await tester.pumpWidget(
+    AplicativoDoPaciente(
+      autenticacao: autenticacao,
+      cliente: api.cliente,
+      base: Uri.parse('https://api.exemplo.test'),
+      abridor: abridor ?? AbridorDeLinksFalso(),
+      // Sem nada dito, como numa instalação nova no Android 13: sem a permissão.
+      notificacoes: notificacoes ?? NotificacoesFalsas(),
+      preferencias: preferencias ?? PreferenciasFalsas(),
+      lerArquivo: lerDoDisco,
+    ),
+  );
   await tester.pump();
 }
 
@@ -358,10 +409,12 @@ void main() {
     }
 
     String emailEmEntrar(WidgetTester tester) => tester
-        .widget<TextField>(find.descendant(
-          of: find.descendant(of: find.byType(EntrarScreen), matching: find.widgetWithText(TextFormField, 'E-mail')),
-          matching: find.byType(TextField),
-        ))
+        .widget<TextField>(
+          find.descendant(
+            of: find.descendant(of: find.byType(EntrarScreen), matching: find.widgetWithText(TextFormField, 'E-mail')),
+            matching: find.byType(TextField),
+          ),
+        )
         .controller!
         .text;
 
@@ -434,27 +487,34 @@ void main() {
     });
   });
 
-  testWidgets('portão criado com a sessão já assentada: a primeira troca de área também fecha o que está aberto', (tester) async {
+  testWidgets('portão criado com a sessão já assentada: a primeira troca de área também fecha o que está aberto', (
+    tester,
+  ) async {
     final autenticacao = AutenticacaoFalsa();
     final pacientes = RepositorioDoPacienteFalso(meu: [const ErroDaApi.semConexao()]);
     final vm = SessaoViewModel(autenticacao: autenticacao, pacientes: pacientes)..iniciar();
     addTearDown(vm.dispose);
-    final lembretes = LembretesViewModel(notificacoes: NotificacoesFalsas(), dispositivos: DispositivosFalso(), sessao: vm)
-      ..iniciar();
+    final lembretes = LembretesViewModel(
+      notificacoes: NotificacoesFalsas(),
+      dispositivos: DispositivosFalso(),
+      sessao: vm,
+    )..iniciar();
     addTearDown(lembretes.dispose);
     // A sessão já sabe que não há ninguém antes de o portão existir.
     autenticacao.emitir(null);
     await tester.pump();
 
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        Provider<ServicoDeAutenticacao>.value(value: autenticacao),
-        Provider<RepositorioDoPaciente>.value(value: pacientes),
-        ChangeNotifierProvider<SessaoViewModel>.value(value: vm),
-        ChangeNotifierProvider<LembretesViewModel>.value(value: lembretes),
-      ],
-      child: const MaterialApp(home: PortaoDaSessao(lerArquivo: lerDoDisco)),
-    ));
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ServicoDeAutenticacao>.value(value: autenticacao),
+          Provider<RepositorioDoPaciente>.value(value: pacientes),
+          ChangeNotifierProvider<SessaoViewModel>.value(value: vm),
+          ChangeNotifierProvider<LembretesViewModel>.value(value: lembretes),
+        ],
+        child: const MaterialApp(home: PortaoDaSessao(lerArquivo: lerDoDisco)),
+      ),
+    );
     await tocar(tester, 'Criar conta');
     expect(find.byType(CriarContaScreen), findsOneWidget);
 
@@ -536,84 +596,185 @@ void main() {
     expect(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'), findsOneWidget);
   });
 
-  testWidgets('o portão em miniatura da Etapa 14: outra pessoa reserva antes, a grade recarrega, e o outro horário fica reservado', (
-    tester,
-  ) async {
+  testWidgets(
+    'o portão em miniatura da Etapa 20: a cidade no Início, o plano na busca, o card, o perfil, e a cidade lembrada',
+    (tester) async {
+      final preferencias = PreferenciasFalsas();
+      final autenticacao = AutenticacaoFalsa();
+      final api = ApiFalsa(temPerfil: true)..versao2 = true;
+      await montar(tester, autenticacao, api, preferencias: preferencias);
+      await sessao(tester, autenticacao, ana);
+      Finder naFolha(String texto) => find.descendant(of: find.byType(BottomSheet), matching: find.text(texto));
+
+      // Início: a cidade escolhida na folha fica guardada e vale para a busca.
+      expect(find.text('Todas as cidades'), findsOneWidget);
+      await tester.tap(find.byType(SeletorDaCidade));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Quixadá, CE'));
+      await tester.pumpAndSettle();
+      expect(preferencias.guardadas, [1]);
+      expect(api.pedidosA('GET', '/profissionais').last.url.queryParameters, {'cidade': '1', 'pagina': '1'});
+
+      // Buscar: a mesma cidade, e o plano escolhido na folha dele.
+      await abrirAba(tester, 'Buscar');
+      expect(find.descendant(of: find.byType(SeletorDaCidade), matching: find.text('Quixadá, CE')), findsOneWidget);
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Unimed'));
+      await tester.pumpAndSettle();
+      expect(api.pedidosA('GET', '/profissionais').last.url.queryParameters, {
+        'cidade': '1',
+        'plano': '3',
+        'pagina': '1',
+      });
+
+      // O card: os planos e o próximo horário; a cidade não, que está no alto.
+      final card = find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó');
+      expect(find.descendant(of: card, matching: find.text('Aceita Unimed e Hapvida')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Próximo horário: amanhã, 09:00')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Quixadá, CE')), findsNothing);
+
+      // Um plano que ele não aceita: a lista vazia diz o que foi pedido.
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Hapvida'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CardDoProfissional), findsOneWidget, reason: 'o cardiologista aceita Hapvida também');
+      api.forcadas['GET /profissionais'] = ApiFalsa.json(200, {
+        'profissionais': <Object>[],
+        'paginacao': {'pagina': 1, 'limite': 20, 'total': 0, 'paginas': 0},
+      });
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Unimed'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Nenhum profissional que aceite Unimed em Quixadá. Tente outro plano, ou qualquer plano.'),
+        findsOneWidget,
+      );
+
+      // O perfil: a cidade da clínica, as formas e os planos.
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Qualquer plano, ou sem plano'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfissionalScreen), findsOneWidget);
+      expect(find.text('Quixadá, CE'), findsOneWidget);
+      expect(find.text('Pagamento pelo aplicativo ou pelo plano de saúde.'), findsOneWidget);
+      expect(find.text('Unimed, Hapvida'), findsOneWidget);
+
+      // Abrir o aplicativo de novo: a primeira busca já sai na cidade guardada.
+      final outraApi = ApiFalsa(temPerfil: true)..versao2 = true;
+      await tester.pumpWidget(const SizedBox());
+      await montar(tester, autenticacao, outraApi, preferencias: preferencias);
+      await sessao(tester, autenticacao, ana);
+      expect(outraApi.pedidosA('GET', '/profissionais').first.url.queryParameters, {'cidade': '1', 'pagina': '1'});
+      expect(find.descendant(of: find.byType(SeletorDaCidade), matching: find.text('Quixadá, CE')), findsOneWidget);
+    },
+  );
+
+  testWidgets('contra a API de produção (v1): sem cidades nem planos, a busca segue como antes', (tester) async {
     final autenticacao = AutenticacaoFalsa();
     final api = ApiFalsa(temPerfil: true);
     await montar(tester, autenticacao, api);
     await sessao(tester, autenticacao, ana);
+
     await abrirAba(tester, 'Buscar');
 
-    // O cardiologista, e as 14:30 de amanhã.
-    await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
-    await tester.pumpAndSettle();
-    expect(find.text('Etapa 1 de 3'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('14:30'));
-    await tester.pumpAndSettle();
-
-    // Entre a grade e a confirmação, outra pessoa reserva as 14:30: a API
-    // recusa pela versão, e a grade nova já vem sem elas.
-    api.forcadas['POST /consultas'] = ApiFalsa.json(
-      409,
-      ApiFalsa.erro(
-        'HORARIO_INDISPONIVEL',
-        'Este horário acabou de ser reservado por outro paciente.',
-        'recarregar_horarios',
-      ),
-    );
-    api.forcadas['GET /profissionais/2/horarios'] = ApiFalsa.json(200, ApiFalsa.grade(tirar: {43}));
-
-    await tester.tap(find.text('Continuar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Resumo da consulta'), findsOneWidget);
-    expect(find.text('Etapa 2 de 3'), findsOneWidget);
-    await tester.tap(find.text('Confirmar e ir para o pagamento'));
-    await tester.pumpAndSettle();
-
-    // O pedido levou o horário e a versão da grade, com o token da conta.
-    final primeira = api.pedidosA('POST', '/consultas').single;
-    expect(jsonDecode(primeira.body), {'horarioId': 43, 'versao': 0});
-    expect(primeira.headers['Authorization'], 'Bearer token-de-teste');
-
-    // O fallback do TCC (Seção 3.8.3): a grade recarregada, sem as 14:30, e a
-    // explicação com a mensagem da API.
-    expect(api.pedidosA('GET', '/profissionais/2/horarios'), hasLength(2));
-    expect(find.text('Esse horário não está mais livre'), findsOneWidget);
-    expect(
-      find.text('Este horário acabou de ser reservado por outro paciente. A lista de horários já foi atualizada.'),
-      findsOneWidget,
-    );
-    expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('14:30')), findsNothing);
-
-    // Uma das sugestões, direto para o resumo, e desta vez a reserva sai.
-    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('10:30')));
-    await tester.pumpAndSettle();
-    expect(find.text('Resumo da consulta'), findsOneWidget);
-    await tester.tap(find.text('Confirmar e ir para o pagamento'));
-    await tester.pumpAndSettle();
-
-    expect(jsonDecode(api.pedidosA('POST', '/consultas').last.body), {'horarioId': 42, 'versao': 0});
-    expect(find.text('Pagamento'), findsOneWidget);
-    expect(find.text('Etapa 3 de 3'), findsOneWidget);
-    expect(find.textContaining('Seu horário fica reservado até'), findsOneWidget);
-    expect(find.textContaining('(faltam 15\u00a0minutos)'), findsOneWidget);
-
-    // Voltar do pagamento pergunta antes; saindo, leva à busca, e não ao
-    // resumo nem à grade.
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.text('Sair sem pagar?'), findsOneWidget);
-    await tester.tap(find.text('Sair'));
-    await tester.pumpAndSettle();
-    expect(find.byType(BuscaScreen), findsOneWidget);
-    expect(find.byType(ProfissionalScreen), findsNothing);
+    // As rotas novas dão 404, e a busca não liga: sem filtro novo no pedido,
+    // sem a linha do próximo horário, nem a dos planos.
+    expect(api.pedidosA('GET', '/cidades'), isNotEmpty);
+    expect(api.pedidosA('GET', '/profissionais').last.url.queryParameters, {'pagina': '1'});
+    expect(find.text('Todas as cidades'), findsOneWidget);
+    final card = find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó');
+    expect(card, findsOneWidget);
+    expect(find.descendant(of: card, matching: find.textContaining('horário')), findsNothing);
+    expect(find.descendant(of: card, matching: find.textContaining('Aceita')), findsNothing);
   });
 
-  testWidgets('o portão em miniatura da Etapa 15: pagar na aba, voltar, e a consulta confirmada pela API', (tester) async {
+  testWidgets(
+    'o portão em miniatura da Etapa 14: outra pessoa reserva antes, a grade recarrega, e o outro horário fica reservado',
+    (tester) async {
+      final autenticacao = AutenticacaoFalsa();
+      final api = ApiFalsa(temPerfil: true);
+      await montar(tester, autenticacao, api);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Buscar');
+
+      // O cardiologista, e as 14:30 de amanhã.
+      await tester.tap(find.widgetWithText(ChipDeEscolha, 'Cardiologia'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(CardDoProfissional, 'Carlos Eduardo Timbó'));
+      await tester.pumpAndSettle();
+      expect(find.text('Etapa 1 de 3'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('14:30'), 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.text('14:30'));
+      await tester.pumpAndSettle();
+
+      // Entre a grade e a confirmação, outra pessoa reserva as 14:30: a API
+      // recusa pela versão, e a grade nova já vem sem elas.
+      api.forcadas['POST /consultas'] = ApiFalsa.json(
+        409,
+        ApiFalsa.erro(
+          'HORARIO_INDISPONIVEL',
+          'Este horário acabou de ser reservado por outro paciente.',
+          'recarregar_horarios',
+        ),
+      );
+      api.forcadas['GET /profissionais/2/horarios'] = ApiFalsa.json(200, ApiFalsa.grade(tirar: {43}));
+
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Resumo da consulta'), findsOneWidget);
+      expect(find.text('Etapa 2 de 3'), findsOneWidget);
+      await tester.tap(find.text('Confirmar e ir para o pagamento'));
+      await tester.pumpAndSettle();
+
+      // O pedido levou o horário e a versão da grade, com o token da conta.
+      final primeira = api.pedidosA('POST', '/consultas').single;
+      expect(jsonDecode(primeira.body), {'horarioId': 43, 'versao': 0});
+      expect(primeira.headers['Authorization'], 'Bearer token-de-teste');
+
+      // O fallback do TCC (Seção 3.8.3): a grade recarregada, sem as 14:30, e a
+      // explicação com a mensagem da API.
+      expect(api.pedidosA('GET', '/profissionais/2/horarios'), hasLength(2));
+      expect(find.text('Esse horário não está mais livre'), findsOneWidget);
+      expect(
+        find.text('Este horário acabou de ser reservado por outro paciente. A lista de horários já foi atualizada.'),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('14:30')), findsNothing);
+
+      // Uma das sugestões, direto para o resumo, e desta vez a reserva sai.
+      await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('10:30')));
+      await tester.pumpAndSettle();
+      expect(find.text('Resumo da consulta'), findsOneWidget);
+      await tester.tap(find.text('Confirmar e ir para o pagamento'));
+      await tester.pumpAndSettle();
+
+      expect(jsonDecode(api.pedidosA('POST', '/consultas').last.body), {'horarioId': 42, 'versao': 0});
+      expect(find.text('Pagamento'), findsOneWidget);
+      expect(find.text('Etapa 3 de 3'), findsOneWidget);
+      expect(find.textContaining('Seu horário fica reservado até'), findsOneWidget);
+      expect(find.textContaining('(faltam 15\u00a0minutos)'), findsOneWidget);
+
+      // Voltar do pagamento pergunta antes; saindo, leva à busca, e não ao
+      // resumo nem à grade.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Sair sem pagar?'), findsOneWidget);
+      await tester.tap(find.text('Sair'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BuscaScreen), findsOneWidget);
+      expect(find.byType(ProfissionalScreen), findsNothing);
+    },
+  );
+
+  testWidgets('o portão em miniatura da Etapa 15: pagar na aba, voltar, e a consulta confirmada pela API', (
+    tester,
+  ) async {
     final autenticacao = AutenticacaoFalsa();
     final api = ApiFalsa(temPerfil: true);
     final abridor = AbridorDeLinksFalso();
@@ -844,8 +1005,10 @@ void main() {
     await tocar(tester, 'Editar dados');
     expect(find.byType(FormularioDoPacienteScreen), findsOneWidget);
 
-    api.forcadas['PATCH /pacientes/me'] =
-        ApiFalsa.json(401, ApiFalsa.erro('NAO_AUTENTICADO', 'Faça login para continuar.', 'autenticar'));
+    api.forcadas['PATCH /pacientes/me'] = ApiFalsa.json(
+      401,
+      ApiFalsa.erro('NAO_AUTENTICADO', 'Faça login para continuar.', 'autenticar'),
+    );
     await tester.enterText(find.widgetWithText(TextFormField, 'Nome completo'), 'Ana Lima Sá');
     await tester.pump();
     await tocar(tester, 'Salvar alterações');
@@ -922,11 +1085,15 @@ void main() {
     expect(find.text('Atualize o aplicativo'), findsOneWidget);
   });
 
-  testWidgets('barra de status do Android: ícones claros sobre o fundo escuro, e escuros de volta nas telas claras',
-      (tester) async {
+  testWidgets('barra de status do Android: ícones claros sobre o fundo escuro, e escuros de volta nas telas claras', (
+    tester,
+  ) async {
     final autenticacao = AutenticacaoFalsa();
     final api = ApiFalsa(temPerfil: true);
-    api.forcadas['GET /pacientes/me'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+    api.forcadas['GET /pacientes/me'] = ApiFalsa.json(
+      500,
+      ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'),
+    );
     await montar(tester, autenticacao, api);
     // A espera inicial tem o fundo na cor principal.
     expect(SystemChrome.latestStyle!.statusBarIconBrightness, Brightness.light);
@@ -945,7 +1112,10 @@ void main() {
   testWidgets('falha ao carregar o perfil: tentar de novo, ou sair', (tester) async {
     final autenticacao = AutenticacaoFalsa();
     final api = ApiFalsa(temPerfil: true);
-    api.forcadas['GET /pacientes/me'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+    api.forcadas['GET /pacientes/me'] = ApiFalsa.json(
+      500,
+      ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'),
+    );
     await montar(tester, autenticacao, api);
 
     await sessao(tester, autenticacao, ana);
@@ -1140,7 +1310,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('"Ligar para a clínica" liga para a clínica que a busca conhece, com o nome e o número', (tester) async {
+    testWidgets('"Ligar para a clínica" liga para a clínica que a busca conhece, com o nome e o número', (
+      tester,
+    ) async {
       final autenticacao = AutenticacaoFalsa();
       final abridor = AbridorDeLinksFalso();
       await montar(tester, autenticacao, ApiFalsa(temPerfil: true), abridor: abridor);
@@ -1277,7 +1449,10 @@ void main() {
       testWidgets('permitido, mas o registro falha: o aviso diz que o aplicativo tenta de novo', (tester) async {
         final autenticacao = AutenticacaoFalsa();
         final api = ApiFalsa();
-        api.forcadas['POST /dispositivos'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        api.forcadas['POST /dispositivos'] = ApiFalsa.json(
+          500,
+          ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'),
+        );
         await montar(tester, autenticacao, api, notificacoes: NotificacoesFalsas(concede: true));
         await cadastrar(tester, autenticacao);
 
@@ -1370,7 +1545,9 @@ void main() {
     });
 
     group('o toque no lembrete', () {
-      testWidgets('com uma tela aberta por cima: ela fecha, os detalhes abrem, e voltar leva ao Início', (tester) async {
+      testWidgets('com uma tela aberta por cima: ela fecha, os detalhes abrem, e voltar leva ao Início', (
+        tester,
+      ) async {
         final autenticacao = AutenticacaoFalsa();
         final api = comConsultaConfirmada();
         final notificacoes = NotificacoesFalsas();
@@ -1457,7 +1634,10 @@ void main() {
         final autenticacao = AutenticacaoFalsa();
         final api = comConsultaConfirmada();
         final notificacoes = NotificacoesFalsas();
-        api.forcadas['GET /consultas/90'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        api.forcadas['GET /consultas/90'] = ApiFalsa.json(
+          500,
+          ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'),
+        );
         await montar(tester, autenticacao, api, notificacoes: notificacoes);
         await sessao(tester, autenticacao, ana);
 
@@ -1505,7 +1685,10 @@ void main() {
         final aviso = Theme.of(tester.element(fechar)).extension<CoresDeRetorno>()!.aviso;
         final cor = tester.widget<IconButton>(find.ancestor(of: fechar, matching: find.byType(IconButton))).color!;
         expect(razaoDeContraste(cor, aviso.fundo), greaterThanOrEqualTo(3));
-        expect(tester.getSize(find.ancestor(of: fechar, matching: find.byType(IconButton))).height, greaterThanOrEqualTo(48));
+        expect(
+          tester.getSize(find.ancestor(of: fechar, matching: find.byType(IconButton))).height,
+          greaterThanOrEqualTo(48),
+        );
 
         await tester.tap(fechar);
         await tester.pumpAndSettle();
@@ -1549,7 +1732,10 @@ void main() {
       testWidgets('o registro que falha: "Tentar de novo" registra', (tester) async {
         final autenticacao = AutenticacaoFalsa();
         final api = ApiFalsa(temPerfil: true);
-        api.forcadas['POST /dispositivos'] = ApiFalsa.json(500, ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'));
+        api.forcadas['POST /dispositivos'] = ApiFalsa.json(
+          500,
+          ApiFalsa.erro('ERRO_INTERNO', 'Algo deu errado do nosso lado.'),
+        );
         await montar(tester, autenticacao, api, notificacoes: NotificacoesFalsas(permitido: true));
         await sessao(tester, autenticacao, ana);
         await abrirAba(tester, 'Perfil');

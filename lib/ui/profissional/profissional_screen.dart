@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
+import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/profissional.dart';
 import '../agendamento/etapa_do_agendamento.dart';
@@ -260,7 +261,7 @@ class _ClinicaEValor extends StatelessWidget {
             _Linha(
               icone: Icons.location_on_outlined,
               titulo: clinica.nome,
-              textos: [?clinica.endereco, ?clinica.telefone],
+              textos: [?clinica.endereco, ?clinica.cidade?.rotulo, ?clinica.telefone],
             ),
             if (clinica.endereco != null || clinica.telefone != null) ...[
               const Divider(height: 1),
@@ -271,12 +272,39 @@ class _ClinicaEValor extends StatelessWidget {
           _Linha(
             icone: Icons.payments_outlined,
             titulo: '${semQuebra(profissional.valorFormatado)} por consulta',
-            textos: const ['Pagamento antecipado, feito pelo aplicativo.'],
+            textos: [textoDasFormas(profissional.formasDePagamento)],
           ),
+          if (profissional.planos.isNotEmpty) ...[
+            const Divider(height: 1),
+            _Linha(
+              icone: Icons.health_and_safety_outlined,
+              titulo: 'Planos aceitos',
+              textos: [profissional.planos.map((plano) => plano.nome).join(', ')],
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// Como o profissional recebe, numa frase. Só o aplicativo é a v1: a frase de
+/// sempre, do pagamento antecipado. Escolher a forma no agendamento é da
+/// Etapa 21.
+String textoDasFormas(List<FormaDePagamento> formas) {
+  if (formas case [FormaDePagamento.app]) return 'Pagamento antecipado, feito pelo aplicativo.';
+  final partes = [
+    for (final forma in formas)
+      switch (forma) {
+        FormaDePagamento.app => 'pelo aplicativo',
+        FormaDePagamento.plano => 'pelo plano de saúde',
+        FormaDePagamento.clinica => 'na clínica',
+      },
+  ];
+  final juntas = partes.length == 1
+      ? partes.single
+      : '${partes.sublist(0, partes.length - 1).join(', ')} ou ${partes.last}';
+  return 'Pagamento $juntas.';
 }
 
 class _Linha extends StatelessWidget {

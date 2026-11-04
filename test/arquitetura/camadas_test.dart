@@ -17,12 +17,13 @@ void main() {
     expect(comFlutter, isEmpty);
   });
 
-  // Cada pacote do Firebase entra por um adaptador só, atrás de uma interface:
-  // o resto do aplicativo é testado sem ele.
-  test('só os adaptadores importam os pacotes do Firebase', () {
+  // Cada pacote do aparelho entra por um adaptador só, atrás de uma
+  // interface: o resto do aplicativo é testado sem ele.
+  test('só os adaptadores importam os pacotes do Firebase e o das preferências', () {
     const adaptadores = {
       'package:firebase_auth/': 'lib/data/services/autenticacao_firebase.dart',
       'package:firebase_messaging/': 'lib/data/services/notificacoes_firebase.dart',
+      'package:shared_preferences/': 'lib/data/services/preferencias_shared.dart',
     };
     final arquivos = [
       for (final arquivo in Directory('lib').listSync(recursive: true).whereType<File>())

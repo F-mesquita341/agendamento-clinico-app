@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/repositorio_de_consultas.dart';
 import '../../data/repositories/repositorio_do_catalogo.dart';
+import '../../data/services/preferencias_do_aparelho.dart';
 import '../../data/services/servico_de_notificacoes.dart';
 import '../../domain/models/profissional.dart';
 import '../busca/busca_screen.dart';
@@ -45,7 +46,10 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
   void initState() {
     super.initState();
     context.read<AbasDoShell>().recomecar();
-    _busca = BuscaViewModel(context.read<RepositorioDoCatalogo>())..carregar();
+    _busca = BuscaViewModel(
+      context.read<RepositorioDoCatalogo>(),
+      preferencias: context.read<PreferenciasDoAparelho>(),
+    )..carregar();
     _consultas = ConsultasViewModel(context.read<RepositorioDeConsultas>())..carregar();
     _lembretes = context.read<LembretesViewModel>()..addListener(_aoMudarLembretes);
     _comOAppAberto = _lembretes.recebidosComOAppAberto.listen(_mostrarLembrete);

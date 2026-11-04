@@ -5,6 +5,7 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.da
 import 'package:agendamento_clinico/data/services/api_client.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
+import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -208,6 +209,197 @@ void main() {
 
     test('corpo que nem objeto é também', () async {
       await expectLater(catalogo(<Object>[]).profissionais(), respostaInesperada);
+    });
+  });
+
+  group('versão 2: cidades e planos', () {
+    test('lê as cidades, sem o token da conta', () async {
+      final cidades = await catalogo({
+        'cidades': [
+          {'id': 1, 'nome': 'Quixadá', 'uf': 'CE'},
+          {'id': 2, 'nome': 'Quixeramobim', 'uf': 'CE'},
+        ],
+      }).cidades();
+
+      expect(cidades.map((c) => c.rotulo), ['Quixadá, CE', 'Quixeramobim, CE']);
+      expect(cidades.first.id, 1);
+      expect(pedidos.single.url.path, '/cidades');
+      expect(pedidos.single.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('lê os planos, sem o token da conta', () async {
+      final planos = await catalogo({
+        'planos': [
+          {'id': 3, 'nome': 'Unimed'},
+        ],
+      }).planos();
+
+      expect(planos.single.id, 3);
+      expect(planos.single.nome, 'Unimed');
+      expect(pedidos.single.url.path, '/planos');
+      expect(pedidos.single.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('cidade sem a UF, ou plano sem nome, vira RESPOSTA_INESPERADA', () async {
+      await expectLater(
+        catalogo({
+          'cidades': [
+            {'id': 1, 'nome': 'Quixadá'},
+          ],
+        }).cidades(),
+        respostaInesperada,
+      );
+      await expectLater(
+        catalogo({
+          'planos': [
+            {'id': 3},
+          ],
+        }).planos(),
+        respostaInesperada,
+      );
+    });
+  });
+
+  group('versão 2: o profissional', () {
+    const timbo = {
+      'id': 2,
+      'nome': 'Carlos Eduardo Timbó',
+      'registroConselho': 'CRM-CE 12345',
+      'valorFormatado': 'R\$ 250,00',
+      'clinica': {
+        'id': 1,
+        'nome': 'Clínica Exemplo Quixadá',
+        'telefone': '(88) 3000-0000',
+        'endereco': 'Centro, Quixadá - CE',
+        'cidade': {'id': 1, 'nome': 'Quixadá', 'uf': 'CE'},
+        'latitude': -4.9708,
+        'longitude': -39.0153,
+      },
+      'planos': [
+        {'id': 3, 'nome': 'Unimed'},
+        {'id': 4, 'nome': 'Hapvida'},
+      ],
+      'formasDePagamento': ['app', 'plano'],
+      'proximoHorario': {'id': 702, 'inicio': '2026-11-09T11:00:00.000Z'},
+    };
+
+    Map<String, Object?> pagina(List<Object?> itens) => {
+          'profissionais': itens,
+          'paginacao': {'pagina': 1, 'limite': 20, 'total': itens.length, 'paginas': 1},
+        };
+
+    test('cidade e plano vão na consulta com os nomes que a API espera', () async {
+      await catalogo(pagina([])).profissionais(especialidadeId: 2, cidadeId: 1, planoId: 3);
+
+      expect(pedidos.single.url.queryParameters, {'especialidade': '2', 'cidade': '1', 'plano': '3', 'pagina': '1'});
+    });
+
+    test('lê a cidade e as coordenadas da clínica, os planos, as formas e o próximo horário', () async {
+      final profissional = (await catalogo(pagina([timbo])).profissionais()).itens.single;
+
+      final clinica = profissional.clinica!;
+      expect(clinica.cidade?.rotulo, 'Quixadá, CE');
+      expect(clinica.latitude, -4.9708);
+      expect(clinica.longitude, -39.0153);
+      expect(profissional.planos.map((p) => p.nome), ['Unimed', 'Hapvida']);
+      expect(profissional.formasDePagamento, [FormaDePagamento.app, FormaDePagamento.plano]);
+      expect(profissional.proximoHorario?.id, 702);
+      expect(profissional.proximoHorario?.inicio, DateTime.utc(2026, 11, 9, 11));
+    });
+
+    test('o próximo horário tem o dia e a hora da clínica', () async {
+      final profissional = (await catalogo(pagina([
+        // 22:30 em Fortaleza: em UTC já é o dia 10.
+        {...timbo, 'proximoHorario': {'id': 9, 'inicio': '2026-11-10T01:30:00.000Z'}},
+      ])).profissionais()).itens.single;
+
+      expect(profissional.proximoHorario?.dia, DataCivil.tentar(2026, 11, 9));
+      expect(profissional.proximoHorario?.hora, '22:30');
+    });
+
+    test('sem os campos da versão 2 — a API de produção —, vale como na v1', () async {
+      final profissional = (await catalogo(pagina([
+        {
+          'id': 2,
+          'nome': 'Carlos Eduardo Timbó',
+          'registroConselho': 'CRM-CE 12345',
+          'valorFormatado': 'R\$ 250,00',
+          'clinica': {'id': 1, 'nome': 'Clínica Exemplo Quixadá', 'telefone': null, 'endereco': null},
+        },
+      ])).profissionais()).itens.single;
+
+      expect(profissional.planos, isEmpty);
+      expect(profissional.formasDePagamento, [FormaDePagamento.app]);
+      expect(profissional.proximoHorario, isNull);
+      expect(profissional.clinica?.cidade, isNull);
+      expect(profissional.clinica?.latitude, isNull);
+    });
+
+    test('cidade, coordenadas e próximo horário podem vir nulos', () async {
+      final profissional = (await catalogo(pagina([
+        {
+          ...timbo,
+          'clinica': {'id': 1, 'nome': 'Clínica', 'cidade': null, 'latitude': null, 'longitude': null},
+          'proximoHorario': null,
+        },
+      ])).profissionais()).itens.single;
+
+      expect(profissional.clinica?.cidade, isNull);
+      expect(profissional.clinica?.longitude, isNull);
+      expect(profissional.proximoHorario, isNull);
+    });
+
+    test('coordenada inteira é lida como número', () async {
+      final profissional = (await catalogo(pagina([
+        {
+          ...timbo,
+          'clinica': {'id': 1, 'nome': 'Clínica', 'latitude': -4, 'longitude': -39},
+        },
+      ])).profissionais()).itens.single;
+
+      expect(profissional.clinica?.latitude, -4.0);
+    });
+
+    test('forma de pagamento desconhecida é deixada de fora, sem derrubar a busca', () async {
+      final profissional = (await catalogo(pagina([
+        {...timbo, 'formasDePagamento': ['pix', 'app', 'clinica']},
+      ])).profissionais()).itens.single;
+
+      expect(profissional.formasDePagamento, [FormaDePagamento.app, FormaDePagamento.clinica]);
+    });
+
+    test('se nenhuma forma for conhecida, vale o pagamento pelo aplicativo', () async {
+      final profissional = (await catalogo(pagina([
+        {...timbo, 'formasDePagamento': ['pix']},
+      ])).profissionais()).itens.single;
+
+      expect(profissional.formasDePagamento, [FormaDePagamento.app]);
+    });
+
+    test('campos da versão 2 com o tipo errado viram RESPOSTA_INESPERADA', () async {
+      for (final errado in <Map<String, Object?>>[
+        {'planos': 'Unimed'},
+        {'planos': ['Unimed']},
+        {'formasDePagamento': 'app'},
+        {'formasDePagamento': [1]},
+        {'proximoHorario': '2026-11-09T11:00:00.000Z'},
+        {'proximoHorario': {'id': 9, 'inicio': '2026-11-09T08:00:00.000'}},
+        {'proximoHorario': {'inicio': '2026-11-09T11:00:00.000Z'}},
+        {
+          'clinica': {'id': 1, 'nome': 'Clínica', 'cidade': 'Quixadá'},
+        },
+        {
+          'clinica': {'id': 1, 'nome': 'Clínica', 'latitude': '-4.97'},
+        },
+      ]) {
+        await expectLater(
+          catalogo(pagina([
+            {...timbo, ...errado},
+          ])).profissionais(),
+          respostaInesperada,
+          reason: '$errado',
+        );
+      }
     });
   });
 
