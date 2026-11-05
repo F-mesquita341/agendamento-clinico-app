@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../data/services/preferencias_do_aparelho.dart';
+import '../../data/services/servico_de_localizacao.dart';
 import '../../domain/models/cidade.dart';
 import '../../domain/models/clinica.dart';
+import '../../domain/models/coordenadas.dart';
 import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/especialidade.dart';
@@ -16,6 +18,18 @@ import '../comum/defeitos.dart';
 import '../comum/estados_de_carga.dart';
 import 'sugestoes.dart';
 
+/// Como terminou a escolha de "Perto de mim".
+enum ResultadoDoPertoDeMim {
+  /// A busca recomeçou, ordenada pela distância.
+  usado,
+
+  /// Não deu para saber onde o aparelho está: nada mudou.
+  semPosicao,
+
+  /// A pessoa escolheu outro lugar enquanto a posição demorava: vale ele.
+  outraEscolha,
+}
+
 /// A busca de profissionais: os filtros — a especialidade, o texto, a cidade e
 /// o plano —, a lista paginada que eles dão, e o estado de cada pedido.
 ///
@@ -23,20 +37,37 @@ import 'sugestoes.dart';
 /// guardada no aparelho de uma abertura para outra, e "Limpar filtros" não a
 /// tira. Cidades e planos vieram com a versão 2 da API; se as listas não
 /// vierem — a API de produção não as tem —, a busca segue sem eles.
+///
+/// No lugar de uma cidade, a pessoa pode escolher "Perto de mim": a busca vale
+/// em todas as cidades, ordenada pela distância até a clínica, calculada aqui
+/// com a posição aproximada do aparelho. A posição não sai do aparelho nem é
+/// guardada; guarda-se só a escolha.
 class BuscaViewModel extends ChangeNotifier {
   BuscaViewModel(
     this._catalogo, {
     PreferenciasDoAparelho? preferencias,
+    ServicoDeLocalizacao? localizacao,
     this.relogio = DateTime.now,
     this.esperaAteAvisar = const Duration(seconds: 4),
     this.esperaAoDigitar = const Duration(milliseconds: 300),
-  }) : _preferencias = preferencias;
+  })  : _preferencias = preferencias,
+        _localizacao = localizacao;
+
+  /// Quantas páginas "Perto de mim" pede, no máximo, para ordenar a lista
+  /// inteira — como a conferência das consultas. A API não ordena pela
+  /// distância: ordenar só a primeira página esconderia quem está mais perto
+  /// numa página seguinte.
+  static const paginasPertoDeMim = 5;
 
   final RepositorioDoCatalogo _catalogo;
 
   /// Onde a cidade escolhida fica guardada. Sem ele, a escolha vale só
   /// enquanto o aplicativo está aberto.
   final PreferenciasDoAparelho? _preferencias;
+
+  /// A localização do aparelho, para "Perto de mim". Sem ela, a opção não
+  /// aparece.
+  final ServicoDeLocalizacao? _localizacao;
 
   /// O relógio que diz "hoje" e "amanhã" no próximo horário de cada card.
   final DateTime Function() relogio;
@@ -60,6 +91,15 @@ class BuscaViewModel extends ChangeNotifier {
   int? _planoId;
   bool _cidadeGuardadaLida = false;
   bool _cidadeEscolhida = false;
+  bool _pertoDeMim = false;
+  bool _localizando = false;
+  Coordenadas? _posicao;
+  String? _avisoDaLocalizacao;
+
+  /// Cada escolha de lugar — uma cidade, ou "Perto de mim" — leva um número.
+  /// A posição que chega depois de outra escolha é descartada: a pessoa já
+  /// escolheu uma cidade enquanto ela demorava.
+  int _escolhaDeLugar = 0;
   String _texto = '';
   String? _termo;
   List<Profissional> _profissionais = const [];
@@ -116,6 +156,34 @@ class BuscaViewModel extends ChangeNotifier {
   /// O plano escolhido; null é "Qualquer plano".
   Plano? get plano => planos.where((p) => p.id == _planoId).firstOrNull;
 
+  /// "Perto de mim" está valendo: a lista vem de todas as cidades, ordenada
+  /// pela distância.
+  bool get pertoDeMim => _pertoDeMim;
+
+  /// A posição foi pedida e ainda não veio: o seletor diz que está procurando.
+  bool get localizando => _localizando;
+
+  /// Dá para oferecer "Perto de mim": há como saber a posição do aparelho.
+  bool get ofereceLocalizacao => _localizacao != null;
+
+  /// A localização do aparelho, para a tela cuidar da permissão.
+  ServicoDeLocalizacao? get localizacao => _localizacao;
+
+  /// O que a tela avisa uma vez, sobre "Perto de mim" na abertura — a posição
+  /// que não veio, a permissão retirada. A tela chama [avisoMostrado] depois.
+  String? get avisoDaLocalizacao => _avisoDaLocalizacao;
+
+  void avisoMostrado() => _avisoDaLocalizacao = null;
+
+  /// Quantos quilômetros até a clínica do profissional, em "Perto de mim";
+  /// null fora dele, ou sem as coordenadas da clínica.
+  double? distanciaAte(Profissional profissional) {
+    final posicao = _pertoDeMim ? _posicao : null;
+    final clinica = profissional.clinica?.coordenadas;
+    if (posicao == null || clinica == null) return null;
+    return distanciaEmKm(posicao, clinica);
+  }
+
   /// A cidade não conta: ela não é filtro, e "Limpar filtros" não a tira.
   bool get temFiltro => _especialidadeId != null || _texto.trim().isNotEmpty || plano != null;
 
@@ -162,14 +230,81 @@ class BuscaViewModel extends ChangeNotifier {
       // Se a pessoa escolheu uma cidade enquanto a leitura demorava, vale a
       // escolha dela.
       if (!_cidadeEscolhida) _cidadeId = guardada;
+      if (!_cidadeEscolhida && await _lerPertoDeMimGuardado()) await _retomarPertoDeMim();
     }
     return _buscar();
   }
 
+  /// "Perto de mim" estava escolhido da última vez: com a permissão ainda
+  /// dada, pega a posição de novo. Nunca pergunta nada à pessoa aqui — a
+  /// permissão só se pede quando ela toca em "Perto de mim".
+  Future<void> _retomarPertoDeMim() async {
+    final servico = _localizacao;
+    if (servico == null) return;
+    final escolha = _escolhaDeLugar;
+    final permissao = await servico.permissao();
+    if (escolha != _escolhaDeLugar) return;
+    if (permissao != PermissaoDaLocalizacao.concedida) {
+      _cidadeId = null;
+      _guardarPertoDeMim(false);
+      _avisoDaLocalizacao = permissao == PermissaoDaLocalizacao.servicoDesligado
+          ? 'A localização do celular está desligada. A busca voltou a mostrar todas as cidades.'
+          : 'A permissão de localização foi retirada. A busca voltou a mostrar todas as cidades.';
+      return;
+    }
+    final posicao = await servico.posicaoAproximada();
+    if (escolha != _escolhaDeLugar) return;
+    _cidadeId = null;
+    if (posicao == null) {
+      // A escolha fica guardada: da próxima vez, a posição pode vir.
+      _avisoDaLocalizacao = 'Não foi possível saber onde você está agora. A busca mostra todas as cidades.';
+      return;
+    }
+    _pertoDeMim = true;
+    _posicao = posicao;
+  }
+
+  /// A pessoa escolheu "Perto de mim", com a permissão já dada — a tela cuida
+  /// da explicação e do pedido antes. Pega a posição; sem ela, nada muda, e
+  /// o resultado diz por quê. Com ela, a busca recomeça em todas as cidades,
+  /// ordenada pela distância, e a escolha fica guardada.
+  Future<ResultadoDoPertoDeMim> usarPertoDeMim() async {
+    final servico = _localizacao;
+    if (servico == null) return ResultadoDoPertoDeMim.semPosicao;
+    final escolha = ++_escolhaDeLugar;
+    _cidadeEscolhida = true;
+    _localizando = true;
+    _notificar();
+    final posicao = await servico.posicaoAproximada();
+    // Outra escolha de lugar veio enquanto a posição demorava: vale ela.
+    if (escolha != _escolhaDeLugar || _descartado) return ResultadoDoPertoDeMim.outraEscolha;
+    _localizando = false;
+    if (posicao == null) {
+      _notificar();
+      return ResultadoDoPertoDeMim.semPosicao;
+    }
+    _pertoDeMim = true;
+    _posicao = posicao;
+    _cidadeId = null;
+    _guardarCidade(null);
+    _guardarPertoDeMim(true);
+    unawaited(_buscar());
+    return ResultadoDoPertoDeMim.usado;
+  }
+
   /// A pessoa escolheu a cidade: fica guardada, e a busca recomeça nela.
+  /// Escolher uma cidade, ou "Todas as cidades", desliga "Perto de mim".
   void escolherCidade(int? id) {
     _cidadeEscolhida = true;
-    if (id == cidade?.id) return;
+    _escolhaDeLugar++;
+    _localizando = false;
+    final estavaPerto = _pertoDeMim;
+    if (estavaPerto) {
+      _pertoDeMim = false;
+      _posicao = null;
+      _guardarPertoDeMim(false);
+    }
+    if (id == cidade?.id && !estavaPerto) return;
     _cidadeId = id;
     _guardarCidade(id);
     _buscar();
@@ -244,7 +379,7 @@ class BuscaViewModel extends ChangeNotifier {
     _aviso.esquecerPedidos();
     _notificar();
 
-    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1, listas: true));
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedirLista(busca));
     if (busca != _busca) return;
     _atualizando = false;
     if (pagina != null) {
@@ -293,7 +428,7 @@ class BuscaViewModel extends ChangeNotifier {
     _aviso.esquecerPedidos();
     _notificar();
 
-    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedir(1, listas: true));
+    final (:pagina, :erro) = await _aviso.acompanhar(() => _pedirLista(busca));
     if (busca != _busca) return;
     if (pagina != null) {
       _mostrar(pagina);
@@ -303,6 +438,32 @@ class BuscaViewModel extends ChangeNotifier {
       _estado = EstadoDaCarga.falhou;
     }
     _notificar();
+  }
+
+  /// A primeira página com os filtros de agora. Em "Perto de mim", todas as
+  /// páginas, até [paginasPertoDeMim], juntas numa só: a lista inteira, para
+  /// ordenar pela distância. Se uma página do meio falhar, a lista falha —
+  /// meia lista ordenada esconderia quem está mais perto.
+  Future<({Pagina<Profissional>? pagina, ErroDaApi? erro})> _pedirLista(int busca) async {
+    final primeira = await _pedir(1, listas: true);
+    final inicio = primeira.pagina;
+    if (!_pertoDeMim || inicio == null) return primeira;
+    var pagina = inicio;
+    final itens = [...pagina.itens];
+    while (pagina.temMais && pagina.pagina < paginasPertoDeMim) {
+      // Uma busca nova já começou: esta lista vai ser descartada.
+      if (busca != _busca) return primeira;
+      final seguinte = await _pedir(pagina.pagina + 1);
+      final veio = seguinte.pagina;
+      if (veio == null) return seguinte;
+      pagina = veio;
+      itens.addAll(veio.itens);
+    }
+    // A lista vem inteira: não há "mostrar mais".
+    return (
+      pagina: Pagina(itens: itens, pagina: pagina.pagina, paginas: pagina.pagina, total: pagina.total),
+      erro: null,
+    );
   }
 
   /// Pede uma página com os filtros de agora — e, antes, as especialidades, se
@@ -371,6 +532,21 @@ class BuscaViewModel extends ChangeNotifier {
     }
   }
 
+  /// A escolha de "Perto de mim" guardada; sem conseguir ler, não vale.
+  Future<bool> _lerPertoDeMimGuardado() async {
+    try {
+      return await _preferencias?.pertoDeMim() ?? false;
+    } catch (erro) {
+      debugPrint('Não deu para ler a escolha de Perto de mim: $erro');
+      return false;
+    }
+  }
+
+  void _guardarPertoDeMim(bool escolhido) {
+    final guardando = _preferencias?.guardarPertoDeMim(escolhido);
+    guardando?.catchError((Object erro) => debugPrint('Não deu para guardar a escolha de Perto de mim: $erro'));
+  }
+
   /// Guardar a cidade nunca segura a tela: a busca não espera, e uma falha só
   /// faz a escolha não sobreviver a uma nova abertura.
   void _guardarCidade(int? id) {
@@ -379,7 +555,7 @@ class BuscaViewModel extends ChangeNotifier {
   }
 
   void _mostrar(Pagina<Profissional> pagina, {List<Profissional> depois = const []}) {
-    _profissionais = [...depois, ...pagina.itens];
+    _profissionais = _naOrdem([...depois, ...pagina.itens]);
     _pagina = pagina.pagina;
     _total = pagina.total;
     _temMais = pagina.temMais;
@@ -388,6 +564,23 @@ class BuscaViewModel extends ChangeNotifier {
       final conhecida = _clinicas.any((outra) => outra.nome == clinica.nome && outra.telefone == clinica.telefone);
       if (!conhecida) _clinicas.add(clinica);
     }
+  }
+
+  /// Em "Perto de mim", do mais perto ao mais longe; quem não tem as
+  /// coordenadas da clínica vai para o fim, na ordem da API. Fora dele, a
+  /// ordem da API.
+  List<Profissional> _naOrdem(List<Profissional> lista) {
+    if (!_pertoDeMim || _posicao == null) return lista;
+    final medidos = [
+      for (final (indice, profissional) in lista.indexed) (indice: indice, profissional: profissional, km: distanciaAte(profissional)),
+    ];
+    medidos.sort((a, b) => switch ((a.km, b.km)) {
+          (final ka?, final kb?) when ka != kb => ka.compareTo(kb),
+          (null, final _?) => 1,
+          (final _?, null) => -1,
+          _ => a.indice.compareTo(b.indice),
+        });
+    return [for (final medido in medidos) medido.profissional];
   }
 
   static String? _termoDe(String texto) {

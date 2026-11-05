@@ -1,7 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- O modelo do Flutter só declara a internet no manifesto de depuração:
          sem esta linha, o APK de release não alcança a API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- "Perto de mim" (versão 2): só a localização aproximada, por
+         minimização. A precisa, a de segundo plano e o serviço de localização
+         em primeiro plano, que o pacote geolocator poderia trazer, saem do
+         manifesto final: o aplicativo nunca os usa. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove"/>
     <!-- Sem backup nem transferência entre aparelhos: a sessão do Firebase
          não sai do aparelho (res/xml/regras_de_extracao.xml). -->
     <application
@@ -54,6 +63,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- O serviço de localização em segundo plano do geolocator: o
+             aplicativo só pede a posição com a tela aberta, uma vez, e nunca
+             o usa. -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            tools:node="remove"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

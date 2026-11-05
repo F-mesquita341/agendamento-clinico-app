@@ -18,7 +18,9 @@ import 'data/services/api_client.dart';
 import 'data/services/autenticacao_firebase.dart';
 import 'data/services/notificacoes_firebase.dart';
 import 'data/services/preferencias_do_aparelho.dart';
+import 'data/services/localizacao_geolocator.dart';
 import 'data/services/preferencias_shared.dart';
+import 'data/services/servico_de_localizacao.dart';
 import 'data/services/servico_de_autenticacao.dart';
 import 'data/services/servico_de_notificacoes.dart';
 import 'ui/comum/textos.dart';
@@ -39,6 +41,7 @@ Future<void> main() async {
     abridor: AbridorDeLinksDoAparelho(),
     notificacoes: NotificacoesFirebase(),
     preferencias: PreferenciasShared(),
+    localizacao: LocalizacaoGeolocator(),
   ));
 }
 
@@ -54,6 +57,7 @@ class AplicativoDoPaciente extends StatefulWidget {
     required this.abridor,
     required this.notificacoes,
     required this.preferencias,
+    required this.localizacao,
     this.lerArquivo,
   });
 
@@ -67,8 +71,11 @@ class AplicativoDoPaciente extends StatefulWidget {
   /// A permissão de notificações, o endereço do aparelho e os lembretes.
   final ServicoDeNotificacoes notificacoes;
 
-  /// O que fica guardado no aparelho: a cidade escolhida.
+  /// O que fica guardado no aparelho: a cidade escolhida, ou "Perto de mim".
   final PreferenciasDoAparelho preferencias;
+
+  /// A posição aproximada do aparelho, para "Perto de mim". Não sai dele.
+  final ServicoDeLocalizacao localizacao;
 
   /// Os arquivos do pacote do aplicativo — o texto do termo.
   final Future<String> Function(String caminho)? lerArquivo;
@@ -131,6 +138,7 @@ class _AplicativoDoPacienteState extends State<AplicativoDoPaciente> {
         Provider<ServicoDeAutenticacao>.value(value: widget.autenticacao),
         Provider<AbridorDeLinks>.value(value: widget.abridor),
         Provider<PreferenciasDoAparelho>.value(value: widget.preferencias),
+        Provider<ServicoDeLocalizacao>.value(value: widget.localizacao),
         Provider<RepositorioDoCatalogo>(create: (_) => RepositorioDoCatalogoRemoto(_api)),
         Provider<RepositorioDeConsultas>(create: (_) => RepositorioDeConsultasRemoto(_api)),
         Provider<RepositorioDoPaciente>(create: (_) => RepositorioDoPacienteRemoto(_api)),

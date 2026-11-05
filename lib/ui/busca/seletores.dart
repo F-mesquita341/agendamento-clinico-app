@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../comum/espaco.dart';
 import 'busca_view_model.dart';
+import 'perto_de_mim.dart';
 
-/// A cidade da busca, no alto do Início e da Busca: "Quixadá, CE", ou "Todas
-/// as cidades". Tocar abre a lista numa folha. Lido como um botão só: "Cidade:
-/// Quixadá, CE. Trocar".
+/// A cidade da busca, no alto do Início e da Busca: "Quixadá, CE", "Todas as
+/// cidades", ou "Perto de mim" (versão 2). Tocar abre a lista numa folha. Lido
+/// como um botão só: "Cidade: Quixadá, CE. Trocar".
 class SeletorDaCidade extends StatelessWidget {
   const SeletorDaCidade({super.key, required this.vm});
 
@@ -13,15 +14,31 @@ class SeletorDaCidade extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rotulo = vm.cidade?.rotulo ?? 'Todas as cidades';
+    final (rotulo, leitura, icone) = switch ((vm.localizando, vm.pertoDeMim)) {
+      (true, _) => ('Procurando você…', 'Cidade: procurando onde você está', Icons.near_me_outlined),
+      (_, true) => ('Perto de mim', 'Cidade: perto de mim. Trocar', Icons.near_me_outlined),
+      _ => (
+          vm.cidade?.rotulo ?? 'Todas as cidades',
+          'Cidade: ${vm.cidade?.rotulo ?? 'Todas as cidades'}. Trocar',
+          Icons.location_on_outlined,
+        ),
+    };
     return _Seletor(
-      icone: Icons.location_on_outlined,
+      icone: icone,
       texto: rotulo,
-      leitura: 'Cidade: $rotulo. Trocar',
+      leitura: leitura,
       aoTocar: () => _escolher<int>(
         context,
         vm: vm,
         titulo: 'Onde você quer se consultar?',
+        antes: vm.ofereceLocalizacao
+            ? (
+                rotulo: 'Perto de mim',
+                icone: Icons.near_me_outlined,
+                marcada: vm.pertoDeMim,
+                aoEscolher: () => escolherPertoDeMim(context, vm),
+              )
+            : null,
         nenhum: 'Todas as cidades',
         opcoes: () => [for (final cidade in vm.cidades) (valor: cidade.id, rotulo: cidade.rotulo)],
         escolhido: vm.cidade?.id,
@@ -102,10 +119,14 @@ class _Seletor extends StatelessWidget {
 /// A folha de escolha: a opção "nenhum" primeiro, depois a lista, com a
 /// escolhida marcada. Se a lista não veio, pede de novo ao abrir; se ainda
 /// assim não vier, diz isso, e a única opção é a "nenhum".
+///
+/// [antes] é uma opção que vem antes de todas, com ícone — "Perto de mim", na
+/// folha da cidade. Marcada, nenhuma outra aparece marcada.
 Future<void> _escolher<T>(
   BuildContext context, {
   required BuscaViewModel vm,
   required String titulo,
+  ({String rotulo, IconData icone, bool marcada, VoidCallback aoEscolher})? antes,
   required String nenhum,
   required List<({T valor, String rotulo})> Function() opcoes,
   required T? escolhido,
@@ -116,7 +137,7 @@ Future<void> _escolher<T>(
     await vm.tentarListasDeNovo();
     if (!context.mounted) return;
   }
-  final escolha = await showModalBottomSheet<({T? valor})>(
+  final escolha = await showModalBottomSheet<({T? valor, bool antes})>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -125,13 +146,14 @@ Future<void> _escolher<T>(
       // Lida aqui, e não antes: a lista pode ter chegado no "tentar de novo".
       final atuais = opcoes();
       final tema = Theme.of(contexto);
+      final antesMarcada = antes?.marcada ?? false;
       Widget opcao(T? valor, String rotulo) {
-        final marcada = valor == escolhido;
+        final marcada = !antesMarcada && valor == escolhido;
         return ListTile(
           title: Text(rotulo),
           selected: marcada,
           trailing: marcada ? const Icon(Icons.check) : null,
-          onTap: () => Navigator.pop(contexto, (valor: valor)),
+          onTap: () => Navigator.pop(contexto, (valor: valor, antes: false)),
         );
       }
 
@@ -147,6 +169,14 @@ Future<void> _escolher<T>(
                 child: Text(titulo, style: tema.textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w800)),
               ),
             ),
+            if (antes case (:final rotulo, :final icone, :final marcada, aoEscolher: _))
+              ListTile(
+                leading: Icon(icone),
+                title: Text(rotulo),
+                selected: marcada,
+                trailing: marcada ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(contexto, (valor: null, antes: true)),
+              ),
             opcao(null, nenhum),
             for (final (:valor, :rotulo) in atuais) opcao(valor, rotulo),
             if (atuais.isEmpty)
@@ -159,6 +189,13 @@ Future<void> _escolher<T>(
       );
     },
   );
-  if (escolha != null) aoEscolher(escolha.valor);
+  switch (escolha) {
+    case (antes: true, valor: _):
+      antes?.aoEscolher();
+    case (antes: false, :final valor):
+      aoEscolher(valor);
+    case null:
+      break;
+  }
 }
 

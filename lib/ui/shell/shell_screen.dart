@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/repositorio_de_consultas.dart';
 import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../data/services/preferencias_do_aparelho.dart';
+import '../../data/services/servico_de_localizacao.dart';
 import '../../data/services/servico_de_notificacoes.dart';
 import '../../domain/models/profissional.dart';
 import '../busca/busca_screen.dart';
@@ -49,13 +50,27 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
     _busca = BuscaViewModel(
       context.read<RepositorioDoCatalogo>(),
       preferencias: context.read<PreferenciasDoAparelho>(),
-    )..carregar();
+      localizacao: context.read<ServicoDeLocalizacao>(),
+    )
+      ..addListener(_aoMudarBusca)
+      ..carregar();
     _consultas = ConsultasViewModel(context.read<RepositorioDeConsultas>())..carregar();
     _lembretes = context.read<LembretesViewModel>()..addListener(_aoMudarLembretes);
     _comOAppAberto = _lembretes.recebidosComOAppAberto.listen(_mostrarLembrete);
     // O toque que abriu o aplicativo — ou que chegou antes de a conta abrir —
     // espera o shell: é ele que sabe abrir a consulta.
     _atenderToqueDepoisDoQuadro();
+  }
+
+  /// O aviso de "Perto de mim" na abertura — a posição que não veio, a
+  /// permissão retirada —, dito uma vez, na aba que estiver aberta.
+  void _aoMudarBusca() {
+    final aviso = _busca.avisoDaLocalizacao;
+    if (aviso == null) return;
+    _busca.avisoMostrado();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) mostrarRetorno(context, TipoDeRetorno.aviso, aviso);
+    });
   }
 
   void _aoMudarLembretes() {
@@ -118,7 +133,9 @@ class _ShellScreenState extends State<ShellScreen> with RouteAware {
     _lembretes.removeListener(_aoMudarLembretes);
     unawaited(_comOAppAberto.cancel());
     _rotas?.unsubscribe(this);
-    _busca.dispose();
+    _busca
+      ..removeListener(_aoMudarBusca)
+      ..dispose();
     _consultas.dispose();
     super.dispose();
   }

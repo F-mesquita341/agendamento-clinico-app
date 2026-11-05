@@ -6,13 +6,15 @@ import '../../domain/models/plano.dart';
 import '../../domain/models/profissional.dart';
 import 'avatar.dart';
 import 'datas.dart';
+import 'distancia.dart';
 import 'espaco.dart';
 import 'textos.dart';
 
 /// O profissional numa lista: iniciais, nome, especialidade e o valor da
 /// consulta — o que a pessoa precisa para escolher, e nada além (checklist,
 /// itens 8.2 e 5.10). Com a versão 2 da API, também o próximo horário livre,
-/// os planos aceitos e, quando a busca está em todas as cidades, a cidade.
+/// os planos aceitos e, quando a busca está em todas as cidades, a cidade; em
+/// "Perto de mim", a distância até a clínica.
 ///
 /// O card inteiro é um botão só, e é lido como um: tudo isso numa frase. O
 /// próximo horário é só informação: tocar abre o perfil, que lê a grade de
@@ -24,6 +26,7 @@ class CardDoProfissional extends StatelessWidget {
     required this.aoTocar,
     this.hoje,
     this.mostrarCidade = false,
+    this.distancia,
   });
 
   final Profissional profissional;
@@ -37,6 +40,9 @@ class CardDoProfissional extends StatelessWidget {
   /// repetiria em todo card a que está no alto da tela.
   final bool mostrarCidade;
 
+  /// Quantos quilômetros até a clínica, em "Perto de mim"; null fora dele.
+  final double? distancia;
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
@@ -44,6 +50,15 @@ class CardDoProfissional extends StatelessWidget {
     final apoio = tema.textTheme.bodySmall!.copyWith(fontSize: 15, color: cores.onSurfaceVariant);
     final especialidade = profissional.especialidade;
     final cidade = mostrarCidade ? profissional.clinica?.cidade : null;
+    final distancia = this.distancia == null ? null : textoDaDistancia(this.distancia!);
+    // A cidade e a distância numa linha: "Quixadá, CE · a 2,3 km", lida
+    // "Quixadá, CE, a 2,3 quilômetros".
+    final onde = switch ((cidade?.rotulo, distancia)) {
+      (final rotulo?, (:final texto, :final leitura)?) => (texto: '$rotulo · $texto', leitura: '$rotulo, $leitura'),
+      (final rotulo?, null) => (texto: rotulo, leitura: rotulo),
+      (null, final distancia?) => distancia,
+      (null, null) => null,
+    };
     final planos = planosAceitos(profissional.planos);
     final hoje = this.hoje;
     final proximo = hoje != null && profissional.informaProximoHorario
@@ -70,7 +85,8 @@ class CardDoProfissional extends StatelessWidget {
                       children: [
                         Text(profissional.nome, style: tema.textTheme.titleSmall!.copyWith(fontSize: 17)),
                         if (especialidade != null) Text(especialidade.nome, style: apoio),
-                        if (cidade != null) Text(cidade.rotulo, style: apoio),
+                        if (onde case (:final texto, :final leitura)?)
+                          Text(texto, semanticsLabel: leitura, style: apoio),
                         // O valor como a API o escreve, sem conta no aplicativo — só não
                         // quebra de linha no meio.
                         Text.rich(

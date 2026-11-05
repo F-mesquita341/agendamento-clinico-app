@@ -9,10 +9,12 @@ import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.da
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
 import 'package:agendamento_clinico/data/services/preferencias_do_aparelho.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
+import 'package:agendamento_clinico/data/services/servico_de_localizacao.dart';
 import 'package:agendamento_clinico/data/services/servico_de_notificacoes.dart';
 import 'package:agendamento_clinico/domain/models/checkout.dart';
 import 'package:agendamento_clinico/domain/models/cidade.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
+import 'package:agendamento_clinico/domain/models/coordenadas.dart';
 import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
@@ -222,9 +224,13 @@ class CatalogoFalso implements RepositorioDoCatalogo {
 /// As preferências do aparelho em memória. [erroAoLer] e [erroAoGuardar]
 /// simulam o armazenamento falhando.
 class PreferenciasFalsas implements PreferenciasDoAparelho {
-  PreferenciasFalsas({this.cidade});
+  PreferenciasFalsas({this.cidade, this.perto = false});
 
   int? cidade;
+
+  /// A escolha de "Perto de mim" guardada.
+  bool perto;
+  final guardadasPerto = <bool>[];
   Object? erroAoLer;
   Object? erroAoGuardar;
   final guardadas = <int?>[];
@@ -245,6 +251,78 @@ class PreferenciasFalsas implements PreferenciasDoAparelho {
     guardadas.add(cidadeId);
     if (erroAoGuardar case final erro?) throw erro;
     cidade = cidadeId;
+  }
+
+  @override
+  Future<bool> pertoDeMim() async {
+    if (leituraDemorada case final espera?) await espera.future;
+    if (erroAoLer case final erro?) throw erro;
+    return perto;
+  }
+
+  @override
+  Future<void> guardarPertoDeMim(bool escolhido) async {
+    guardadasPerto.add(escolhido);
+    if (erroAoGuardar case final erro?) throw erro;
+    perto = escolhido;
+  }
+}
+
+/// A localização do aparelho, sem o Android: o teste diz em que pé está a
+/// permissão, o que a pessoa responde ao diálogo e onde o aparelho está.
+class LocalizacaoFalsa implements ServicoDeLocalizacao {
+  LocalizacaoFalsa({
+    this.estado = PermissaoDaLocalizacao.concedida,
+    this.respostaAoPedido = PermissaoDaLocalizacao.concedida,
+    this.posicao,
+  });
+
+  PermissaoDaLocalizacao estado;
+
+  /// Como fica a permissão depois do diálogo do Android.
+  PermissaoDaLocalizacao respostaAoPedido;
+
+  /// Onde o aparelho está; null é "não deu para saber a tempo".
+  Coordenadas? posicao;
+
+  /// Se preenchida, a posição só chega quando o teste a completar.
+  Completer<void>? posicaoDemorada;
+
+  int consultas = 0;
+  int pedidos = 0;
+  int posicoesPedidas = 0;
+  int configuracoesAbertas = 0;
+  int configuracoesDaLocalizacaoAbertas = 0;
+
+  @override
+  Future<PermissaoDaLocalizacao> permissao() async {
+    consultas++;
+    return estado;
+  }
+
+  @override
+  Future<PermissaoDaLocalizacao> pedirPermissao() async {
+    pedidos++;
+    return estado = respostaAoPedido;
+  }
+
+  @override
+  Future<Coordenadas?> posicaoAproximada() async {
+    posicoesPedidas++;
+    if (posicaoDemorada case final espera?) await espera.future;
+    return posicao;
+  }
+
+  @override
+  Future<bool> abrirConfiguracoes() async {
+    configuracoesAbertas++;
+    return true;
+  }
+
+  @override
+  Future<bool> abrirConfiguracoesDaLocalizacao() async {
+    configuracoesDaLocalizacaoAbertas++;
+    return true;
   }
 }
 

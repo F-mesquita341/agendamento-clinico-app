@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/data/services/servico_de_autenticacao.dart';
+import 'package:agendamento_clinico/data/services/servico_de_localizacao.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_paciente.dart';
+import 'package:agendamento_clinico/domain/models/coordenadas.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
 import 'package:agendamento_clinico/main.dart';
@@ -14,6 +16,7 @@ import 'package:agendamento_clinico/ui/sessao/sessao_view_model.dart';
 import 'package:provider/provider.dart';
 import 'package:agendamento_clinico/ui/cadastro/formulario_do_paciente_screen.dart';
 import 'package:agendamento_clinico/ui/busca/busca_screen.dart';
+import 'package:agendamento_clinico/ui/busca/perto_de_mim.dart';
 import 'package:agendamento_clinico/ui/busca/seletores.dart';
 import 'package:agendamento_clinico/ui/comum/card_do_profissional.dart';
 import 'package:agendamento_clinico/ui/comum/chip_de_escolha.dart';
@@ -51,6 +54,11 @@ class ApiFalsa {
   /// A API da versão 2 (a homologação): cidades, planos, os filtros e os campos
   /// novos do profissional. Sem ela, é a de produção, que não tem nada disso.
   bool versao2 = false;
+
+  /// Na versão 2, uma clínica em Fortaleza também, com uma pediatra — para
+  /// "Perto de mim" ter o que ordenar. Só quando o teste pede: o portão da
+  /// Etapa 20 conta um profissional só.
+  bool comFortaleza = false;
 
   /// O status da consulta 90 no detalhe: o teste o muda quando o "Mercado
   /// Pago" confirma o pagamento.
@@ -150,11 +158,39 @@ class ApiFalsa {
   /// como a API os aplica: o cardiologista é de Quixadá (1) e aceita 3 e 4.
   http.Response profissionais(Map<String, String> consulta) {
     final passa = !versao2 || ((consulta['cidade'] ?? '1') == '1' && ['3', '4'].contains(consulta['plano'] ?? '3'));
+    // A pediatra de Fortaleza (3) não aceita plano.
+    final passaFortaleza =
+        versao2 && comFortaleza && (consulta['cidade'] ?? '3') == '3' && consulta['plano'] == null;
+    final lista = [
+      if (passa) versao2 ? cardiologistaV2() : cardiologista,
+      if (passaFortaleza) pediatraDeFortaleza,
+    ];
     return json(200, {
-      'profissionais': [if (passa) versao2 ? cardiologistaV2() : cardiologista],
-      'paginacao': {'pagina': 1, 'limite': 20, 'total': passa ? 1 : 0, 'paginas': passa ? 1 : 0},
+      'profissionais': lista,
+      'paginacao': {'pagina': 1, 'limite': 20, 'total': lista.length, 'paginas': lista.isEmpty ? 0 : 1},
     });
   }
+
+  static const pediatraDeFortaleza = {
+    'id': 7,
+    'nome': 'Fernanda Alencar Sá',
+    'registroConselho': 'CRM-CE 76543',
+    'especialidade': {'id': 6, 'nome': 'Pediatria'},
+    'valorCentavos': 18000,
+    'valorFormatado': 'R\$ 180,00',
+    'clinica': {
+      'id': 3,
+      'nome': 'Clínica Demonstração Fortaleza',
+      'telefone': '(85) 3000-0000',
+      'endereco': 'Centro, Fortaleza - CE',
+      'cidade': {'id': 3, 'nome': 'Fortaleza', 'uf': 'CE'},
+      'latitude': -3.734,
+      'longitude': -38.529,
+    },
+    'planos': <Object>[],
+    'formasDePagamento': ['app', 'clinica'],
+    'proximoHorario': null,
+  };
 
   static http.Response json(int status, Object corpo) =>
       http.Response.bytes(utf8.encode(jsonEncode(corpo)), status, headers: {'content-type': 'application/json'});
@@ -284,6 +320,7 @@ Future<void> montar(
   AbridorDeLinksFalso? abridor,
   NotificacoesFalsas? notificacoes,
   PreferenciasFalsas? preferencias,
+  LocalizacaoFalsa? localizacao,
 }) async {
   await tester.pumpWidget(
     AplicativoDoPaciente(
@@ -294,6 +331,7 @@ Future<void> montar(
       // Sem nada dito, como numa instalação nova no Android 13: sem a permissão.
       notificacoes: notificacoes ?? NotificacoesFalsas(),
       preferencias: preferencias ?? PreferenciasFalsas(),
+      localizacao: localizacao ?? LocalizacaoFalsa(),
       lerArquivo: lerDoDisco,
     ),
   );
@@ -752,6 +790,80 @@ void main() {
       expect(find.byType(InicioScreen), findsOneWidget);
       expect(find.text('Sua próxima consulta'), findsOneWidget);
       expect(find.text('Confirmada'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'o portão em miniatura do "Perto de mim": a explicação, a lista pela distância, lembrado, e a permissão retirada',
+    (tester) async {
+      final preferencias = PreferenciasFalsas();
+      // O aparelho está em Fortaleza.
+      final localizacao = LocalizacaoFalsa(
+        estado: PermissaoDaLocalizacao.naoPedida,
+        posicao: const Coordenadas(-3.7319, -38.5267),
+      );
+      final autenticacao = AutenticacaoFalsa();
+      final api = ApiFalsa(temPerfil: true)
+        ..versao2 = true
+        ..comFortaleza = true;
+      await montar(tester, autenticacao, api, preferencias: preferencias, localizacao: localizacao);
+      await sessao(tester, autenticacao, ana);
+      Finder naFolha(String texto) => find.descendant(of: find.byType(BottomSheet), matching: find.text(texto));
+
+      // No Início: "Perto de mim" na folha da cidade, a explicação, e o Android.
+      await tester.tap(find.byType(SeletorDaCidade));
+      await tester.pumpAndSettle();
+      await tester.tap(naFolha('Perto de mim'));
+      await tester.pumpAndSettle();
+      expect(find.text(TextosDoPertoDeMim.explicacaoTitulo), findsOneWidget);
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(localizacao.pedidos, 1);
+      expect(preferencias.guardadasPerto, [true]);
+      expect(api.pedidosA('GET', '/profissionais').last.url.queryParameters, {'pagina': '1'});
+
+      // Na Busca: a mesma escolha, e a lista do mais perto ao mais longe.
+      await abrirAba(tester, 'Buscar');
+      expect(find.descendant(of: find.byType(SeletorDaCidade), matching: find.text('Perto de mim')), findsOneWidget);
+      expect(find.text('2 profissionais, do mais perto ao mais longe'), findsOneWidget);
+      List<String> nomes() => [
+            for (final card in tester.widgetList<CardDoProfissional>(find.byType(CardDoProfissional)))
+              card.profissional.nome,
+          ];
+      expect(nomes(), ['Fernanda Alencar Sá', 'Carlos Eduardo Timbó']);
+      expect(find.text('Fortaleza, CE · a menos de 1\u00a0km'), findsOneWidget);
+      expect(find.text('Quixadá, CE · a 148\u00a0km'), findsOneWidget);
+
+      // Abrir de novo: continua "Perto de mim", sem perguntar nada.
+      final outraApi = ApiFalsa(temPerfil: true)
+        ..versao2 = true
+        ..comFortaleza = true;
+      await tester.pumpWidget(const SizedBox());
+      await montar(tester, autenticacao, outraApi, preferencias: preferencias, localizacao: localizacao);
+      await sessao(tester, autenticacao, ana);
+      await abrirAba(tester, 'Buscar');
+      expect(localizacao.pedidos, 1);
+      expect(nomes(), ['Fernanda Alencar Sá', 'Carlos Eduardo Timbó']);
+
+      // A permissão retirada nas configurações: ao abrir, volta a todas as
+      // cidades, na ordem da API, e avisa.
+      localizacao.estado = PermissaoDaLocalizacao.naoPedida;
+      final terceiraApi = ApiFalsa(temPerfil: true)
+        ..versao2 = true
+        ..comFortaleza = true;
+      await tester.pumpWidget(const SizedBox());
+      await montar(tester, autenticacao, terceiraApi, preferencias: preferencias, localizacao: localizacao);
+      await sessao(tester, autenticacao, ana);
+      expect(
+        find.text('A permissão de localização foi retirada. A busca voltou a mostrar todas as cidades.'),
+        findsOneWidget,
+      );
+      expect(localizacao.pedidos, 1, reason: 'a abertura nunca pede a permissão');
+      expect(preferencias.guardadasPerto, [true, false]);
+      await abrirAba(tester, 'Buscar');
+      expect(find.descendant(of: find.byType(SeletorDaCidade), matching: find.text('Todas as cidades')), findsOneWidget);
+      expect(nomes(), ['Carlos Eduardo Timbó', 'Fernanda Alencar Sá']);
+      expect(find.textContaining(' km'), findsNothing);
     },
   );
 
@@ -1428,7 +1540,7 @@ void main() {
       expect(find.text('Ligar para a clínica'), findsNothing);
     });
 
-    testWidgets('"Como funciona": as seis perguntas, e as respostas dizem o que as telas dizem', (tester) async {
+    testWidgets('"Como funciona": as sete perguntas, e as respostas dizem o que as telas dizem', (tester) async {
       final autenticacao = AutenticacaoFalsa();
       final abridor = AbridorDeLinksFalso();
       await montar(tester, autenticacao, ApiFalsa(temPerfil: true), abridor: abridor);
@@ -1437,7 +1549,7 @@ void main() {
       await tocar(tester, 'Como funciona');
 
       expect(find.byType(ComoFuncionaScreen), findsOneWidget);
-      expect(perguntasFrequentes, hasLength(6));
+      expect(perguntasFrequentes, hasLength(7));
       for (final (:pergunta, resposta: _) in perguntasFrequentes) {
         expect(find.text(pergunta), findsOneWidget, reason: pergunta);
       }

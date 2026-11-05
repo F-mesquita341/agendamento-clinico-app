@@ -46,6 +46,9 @@ dependencies:
   url_launcher: ^6.3.2
   # Versão fixa: a 2.5.6 já exige o Flutter 3.41.
   shared_preferences: 2.5.5
+  # Versão fixa, como as outras: "Perto de mim" (versão 2), só a localização
+  # aproximada, atrás de lib/data/services/localizacao_geolocator.dart.
+  geolocator: 14.1.2
 
 dev_dependencies:
   flutter_test:

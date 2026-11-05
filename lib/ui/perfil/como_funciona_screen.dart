@@ -112,6 +112,12 @@ const perguntasFrequentes = <({String pergunta, String resposta})>[
     resposta: 'Nesta versão não há troca de horário. O caminho é cancelar a consulta e agendar de novo.',
   ),
   (
+    pergunta: 'Para que o Marcaí usa a minha localização?',
+    resposta: 'Só para mostrar os profissionais mais perto, quando você escolhe "Perto de mim" na cidade. A '
+        'localização é aproximada, fica no seu celular e não é enviada nem guardada. Você pode desligar '
+        'escolhendo uma cidade, ou tirar a permissão nas configurações do celular.',
+  ),
+  (
     pergunta: 'Não recebi o lembrete. O que faço?',
     resposta: 'O lembrete chega até 24 horas antes da consulta, se os lembretes estiverem ativados. Confira em '
         'Perfil e, nas configurações do celular, se o aplicativo pode enviar notificações. A consulta continua '

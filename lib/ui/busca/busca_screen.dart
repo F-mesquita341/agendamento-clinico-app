@@ -127,7 +127,7 @@ class _BuscaScreenState extends State<BuscaScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: Espaco.medio),
                           // liveRegion: o leitor de tela anuncia o resultado da busca.
-                          child: Semantics(liveRegion: true, child: Text(_contagem(vm.total), style: apoio)),
+                          child: Semantics(liveRegion: true, child: Text(_contagem(vm.total, pertoDeMim: vm.pertoDeMim), style: apoio)),
                         ),
                       if (vm.temFiltro)
                         TextButton.icon(
@@ -183,6 +183,7 @@ class _BuscaScreenState extends State<BuscaScreen> {
                           aoTocar: () => widget.aoAbrir(profissional),
                           hoje: vm.hoje,
                           mostrarCidade: vm.cidade == null,
+                          distancia: vm.distanciaAte(profissional),
                         ),
                       ),
                     if (vm.erroAoMostrarMais case final erro?) ...[
@@ -221,7 +222,11 @@ class _BuscaScreenState extends State<BuscaScreen> {
   }
 }
 
-String _contagem(int total) => total == 1 ? '1 profissional' : '$total profissionais';
+String _contagem(int total, {bool pertoDeMim = false}) {
+  final quantos = total == 1 ? '1 profissional' : '$total profissionais';
+  // Em "Perto de mim", a ordem é a da distância: a contagem diz isso.
+  return pertoDeMim && total > 1 ? '$quantos, do mais perto ao mais longe' : quantos;
+}
 
 /// Por que a lista veio vazia, com o que a pessoa pode fazer a respeito.
 String _razaoDoVazio(BuscaViewModel vm) {

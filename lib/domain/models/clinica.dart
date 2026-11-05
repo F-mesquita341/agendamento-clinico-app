@@ -1,4 +1,5 @@
 import 'cidade.dart';
+import 'coordenadas.dart';
 
 /// A clínica onde o profissional atende: o contato que o paciente usa para
 /// ligar ou chegar ao local. Telefone e endereço podem não estar cadastrados.
@@ -42,4 +43,10 @@ class Clinica {
   /// cadastradas.
   final double? latitude;
   final double? longitude;
+
+  /// O ponto da clínica, para "Perto de mim"; null se faltar uma das duas.
+  Coordenadas? get coordenadas => switch ((latitude, longitude)) {
+        (final lat?, final lon?) => Coordenadas(lat, lon),
+        _ => null,
+      };
 }

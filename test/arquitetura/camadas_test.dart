@@ -19,11 +19,12 @@ void main() {
 
   // Cada pacote do aparelho entra por um adaptador só, atrás de uma
   // interface: o resto do aplicativo é testado sem ele.
-  test('só os adaptadores importam os pacotes do Firebase e o das preferências', () {
+  test('só os adaptadores importam os pacotes do Firebase, o das preferências e o da localização', () {
     const adaptadores = {
       'package:firebase_auth/': 'lib/data/services/autenticacao_firebase.dart',
       'package:firebase_messaging/': 'lib/data/services/notificacoes_firebase.dart',
       'package:shared_preferences/': 'lib/data/services/preferencias_shared.dart',
+      'package:geolocator/': 'lib/data/services/localizacao_geolocator.dart',
     };
     final arquivos = [
       for (final arquivo in Directory('lib').listSync(recursive: true).whereType<File>())
