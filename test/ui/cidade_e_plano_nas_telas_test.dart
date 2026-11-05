@@ -338,6 +338,24 @@ void main() {
       await conferirNosQuatroAparelhos(tester);
     });
 
+    testWidgets('a folha dos planos, nos quatro aparelhos', (tester) async {
+      await montarBusca(
+        tester,
+        catalogo(),
+      );
+      await tester.tap(find.byType(SeletorDoPlano));
+      await tester.pumpAndSettle();
+
+      for (final aparelho in aparelhos) {
+        await usarAparelho(tester, aparelho);
+        await conferirAcessibilidade(
+          tester,
+          lista: find.descendant(of: find.byType(BottomSheet), matching: find.byType(Scrollable)).first,
+          motivo: aparelho.nome,
+        );
+      }
+    });
+
     testWidgets('a folha das cidades, nos quatro aparelhos', (tester) async {
       await montarBusca(
         tester,
@@ -394,6 +412,21 @@ void main() {
       expect(find.text('Planos aceitos'), findsOneWidget);
       expect(find.text('Unimed, Hapvida'), findsOneWidget);
       expect(find.textContaining('Pagamento antecipado'), findsNothing);
+    });
+
+    testWidgets('sem o aplicativo, com a cidade, as formas e três planos: "Etapa 1 de 2", nos quatro aparelhos', (
+      tester,
+    ) async {
+      await montarPerfil(
+        tester,
+        profissional(
+          formas: const [FormaDePagamento.plano, FormaDePagamento.clinica],
+          planos: const [unimed, hapvida, bradesco],
+        ),
+      );
+      expect(find.text('Etapa 1 de 2'), findsOneWidget);
+
+      await conferirNosQuatroAparelhos(tester);
     });
 
     testWidgets('só o aplicativo e nenhum plano: a frase de sempre, e sem a linha dos planos', (tester) async {

@@ -410,6 +410,61 @@ void main() {
 
       await conferirNosQuatroAparelhos(tester);
     });
+
+    // Etapa 23: os outros estados do Resumo e o que vem depois dele.
+    testWidgets('nos quatro aparelhos, sem escolha: as três opções e o botão desativado', (tester) async {
+      await abrir(tester, ConsultasFalso(), asTres);
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('nos quatro aparelhos, pelo aplicativo: as opções, a nota da reserva e o pagamento antecipado', (
+      tester,
+    ) async {
+      await abrir(tester, ConsultasFalso(), asTres);
+      await tester.tap(find.text('Pelo aplicativo, agora'));
+      await tester.pumpAndSettle();
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('nos quatro aparelhos, com a recusa acima do botão', (tester) async {
+      await abrir(
+        tester,
+        ConsultasFalso(agendar: [
+          const ErroDaApi(
+            status: 422,
+            codigo: 'PLANO_NAO_ACEITO',
+            mensagem: 'Este profissional não atende por esse plano. Escolha outro plano ou outra forma de pagamento.',
+          ),
+        ]),
+        asTres,
+        planoPreferido: 3,
+      );
+      await tester.tap(find.text('Pelo plano de saúde'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmar consulta'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('não atende por esse plano'), findsOneWidget);
+
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    for (final (nome, forma, opcao, plano) in [
+      ('pelo plano', FormaDePagamento.plano, 'Pelo plano de saúde', hapvida),
+      ('na clínica', FormaDePagamento.clinica, 'Na clínica, no dia da consulta', null),
+    ]) {
+      testWidgets('a confirmação $nome, nos quatro aparelhos', (tester) async {
+        await abrir(tester, ConsultasFalso(agendar: [confirmadaCom(forma, plano: plano)]), asTres, planoPreferido: 4);
+        await tester.tap(find.text(opcao));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Confirmar consulta'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ConsultaConfirmadaScreen), findsOneWidget);
+
+        await conferirNosQuatroAparelhos(tester);
+      });
+    }
   });
 
   group('a forma depois de agendar', () {
@@ -429,6 +484,24 @@ void main() {
       expect(valorAMostrar(confirmadaCom(FormaDePagamento.plano, plano: unimed)), isNull);
       expect(valorAMostrar(confirmadaCom(FormaDePagamento.clinica)), 'R\$ 250,00');
       expect(valorAMostrar(confirmadaCom(FormaDePagamento.app)), 'R\$ 250,00');
+    });
+
+    testWidgets('o diálogo sem devolução, nos quatro aparelhos', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: temaDoApp(),
+        home: Builder(
+          builder: (contexto) => Scaffold(
+            body: TextButton(
+              onPressed: () => unawaited(confirmarCancelamento(contexto, confirmada: true, pagaPeloApp: false)),
+              child: const Text('Abrir'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Abrir'));
+      await tester.pumpAndSettle();
+
+      await conferirNosQuatroAparelhos(tester);
     });
 
     testWidgets('cancelar uma consulta pelo plano ou na clínica não fala em devolução', (tester) async {

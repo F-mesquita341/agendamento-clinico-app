@@ -87,7 +87,8 @@ const perguntasFrequentes = <({String pergunta, String resposta})>[
   (
     pergunta: 'Como agendo uma consulta?',
     resposta: 'Em Buscar, escolha a especialidade ou o profissional. Depois escolha o dia e o horário, confira o '
-        'resumo e faça o pagamento antecipado.',
+        'resumo e escolha como pagar: pelo aplicativo, pelo plano de saúde ou na clínica, conforme o que o '
+        'profissional aceita.',
   ),
   (
     pergunta: 'Como funciona o pagamento?',

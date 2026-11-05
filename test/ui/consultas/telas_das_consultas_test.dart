@@ -4,6 +4,7 @@ import 'package:agendamento_clinico/config/tema.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_de_consultas.dart';
 import 'package:agendamento_clinico/data/repositories/repositorio_do_catalogo.dart';
 import 'package:agendamento_clinico/data/services/abridor_de_links.dart';
+import 'package:agendamento_clinico/domain/models/cidade.dart';
 import 'package:agendamento_clinico/domain/models/clinica.dart';
 import 'package:agendamento_clinico/domain/models/consulta.dart';
 import 'package:agendamento_clinico/domain/models/erro_da_api.dart';
@@ -71,6 +72,9 @@ Future<void> montar(
   List<Object?> especialidades = const [<Especialidade>[]],
   List<Object?> profissionais = const [Pagina<Profissional>(itens: [], pagina: 1, paginas: 1, total: 0)],
   List<Object?> horarios = const [],
+  // A cidade da busca (versão 2): a lista de cidades e a guardada.
+  List<Object?>? cidades,
+  PreferenciasFalsas? preferencias,
   double altura = 1400,
   bool assentar = true,
 }) async {
@@ -78,7 +82,12 @@ Future<void> montar(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   consultas = ConsultasFalso(minhas: minhas, cancelar: cancelar, consulta: lidas);
-  catalogo = CatalogoFalso(especialidades: especialidades, profissionais: profissionais, horarios: horarios);
+  catalogo = CatalogoFalso(
+    especialidades: especialidades,
+    profissionais: profissionais,
+    horarios: horarios,
+    cidades: cidades,
+  );
   abridor = AbridorDeLinksFalso();
   abas = AbasDoShell();
   addTearDown(abas.dispose);
@@ -89,7 +98,7 @@ Future<void> montar(
       Provider<AbridorDeLinks>.value(value: abridor),
       ChangeNotifierProvider<AbasDoShell>.value(value: abas),
       ChangeNotifierProvider(create: (_) => ConsultasViewModel(consultas, relogio: () => agora)..carregar()),
-      ChangeNotifierProvider(create: (_) => BuscaViewModel(catalogo)..carregar()),
+      ChangeNotifierProvider(create: (_) => BuscaViewModel(catalogo, preferencias: preferencias)..carregar()),
     ],
     child: MaterialApp(
       theme: temaDoApp(),
@@ -636,6 +645,39 @@ void main() {
 
       await tester.tap(find.text('Anteriores (1)'));
       await tester.pumpAndSettle();
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    // Etapa 23: os detalhes de uma consulta pelo plano, sem o valor.
+    testWidgets('os detalhes de uma consulta pelo plano, confirmada e cancelada, nos quatro aparelhos', (tester) async {
+      await montar(tester, abrirDetalhes: itemDe(consultaNa(amanha, formaDePagamento: FormaDePagamento.plano)));
+      expect(find.text('Valor da consulta'), findsNothing);
+      await conferirNosQuatroAparelhos(tester);
+
+      final cancelada = consultaNa(
+        amanha,
+        status: StatusDaConsulta.cancelada,
+        motivo: MotivoDoCancelamento.paciente,
+        formaDePagamento: FormaDePagamento.plano,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await montar(tester, abrirDetalhes: itemDe(cancelada));
+      expect(find.text('Você cancelou esta consulta.'), findsOneWidget);
+      await conferirNosQuatroAparelhos(tester);
+    });
+
+    testWidgets('o Início com a cidade escolhida, nos quatro aparelhos', (tester) async {
+      await montar(
+        tester,
+        aba: const InicioScreen(),
+        minhas: [pagina([confirmada])],
+        cidades: [
+          [const Cidade(id: 2, nome: 'Quixeramobim', uf: 'CE')],
+        ],
+        preferencias: PreferenciasFalsas(cidade: 2),
+      );
+      expect(find.text('Quixeramobim, CE'), findsOneWidget);
+
       await conferirNosQuatroAparelhos(tester);
     });
 

@@ -67,7 +67,9 @@ class AberturaScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: Espaco.medio),
                             Text(
-                              'Escolha o profissional e o horário, faça o pagamento antecipado e receba um lembrete antes da consulta.',
+                              // Versão 2: o pagamento antecipado é uma das formas, e não a única.
+                              'Escolha o profissional e o horário, pague pelo aplicativo, pelo plano de saúde ou '
+                              'na clínica, e receba um lembrete antes da consulta.',
                               style: tema.textTheme.bodyLarge!.copyWith(color: cores.primaryContainer),
                             ),
                           ],

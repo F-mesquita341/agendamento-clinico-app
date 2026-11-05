@@ -47,6 +47,17 @@ void main() {
     expect(find.textContaining('dia antes'), findsNothing);
   });
 
+  testWidgets('as três formas de pagar, sem dizer que o pagamento é sempre antecipado (versão 2)', (tester) async {
+    await montar(tester);
+
+    expect(
+      find.text('Escolha o profissional e o horário, pague pelo aplicativo, pelo plano de saúde ou na clínica, e '
+          'receba um lembrete antes da consulta.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('antecipado'), findsNothing);
+  });
+
   testWidgets('nos quatro aparelhos', (tester) async {
     await montar(tester);
     await conferirNosQuatroAparelhos(tester);

@@ -1564,6 +1564,9 @@ void main() {
 
       await tocarEm(tester, 'Como funciona o pagamento?');
       expect(find.textContaining('reservado para você por $minutosDeReserva minutos'), findsOneWidget);
+      await tocarEm(tester, 'Como agendo uma consulta?');
+      expect(find.textContaining('escolha como pagar: pelo aplicativo, pelo plano de saúde ou na clínica'), findsOneWidget);
+      expect(find.textContaining('faça o pagamento antecipado'), findsNothing);
       await tocarEm(tester, 'Não recebi o lembrete. O que faço?');
       expect(find.textContaining('até 24 horas antes da consulta'), findsOneWidget);
 
