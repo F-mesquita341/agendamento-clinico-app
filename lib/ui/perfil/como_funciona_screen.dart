@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/models/clinica.dart';
 import '../agendamento/pagamento_antecipado.dart';
-import '../comum/atalhos_da_clinica.dart';
-import '../comum/botoes.dart';
 import '../comum/espaco.dart';
-import '../comum/textos.dart';
 import '../consultas/regras_de_cancelamento.dart';
 
-/// As dúvidas mais comuns, em perguntas curtas (checklist, item 10.6), e o
-/// telefone da clínica a um toque (item 10.3).
+/// As dúvidas mais comuns, em perguntas curtas (checklist, item 10.6). O
+/// telefone da clínica fica onde a clínica aparece: nos detalhes da consulta
+/// e na página do profissional (item 10.3).
 class ComoFuncionaScreen extends StatelessWidget {
-  const ComoFuncionaScreen({super.key, required this.clinicas});
-
-  /// As clínicas que a busca conhece; as sem telefone ficam de fora. Vêm de
-  /// quem abre a tela: ela fica fora do shell, onde a busca está.
-  final List<Clinica> clinicas;
+  const ComoFuncionaScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -46,34 +39,6 @@ class ComoFuncionaScreen extends StatelessWidget {
                 ],
               ),
             ),
-            for (final clinica in clinicas)
-              if (clinica.telefone case final telefone?) ...[
-                const SizedBox(height: Espaco.medio),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(Espaco.medio),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      spacing: Espaco.pequeno,
-                      children: [
-                        Semantics(
-                          header: true,
-                          child: Text(
-                            'Prefere falar com alguém?',
-                            style: tema.textTheme.titleMedium!.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        Text('${clinica.nome} · ${semQuebra(telefone)}', style: tema.textTheme.bodyLarge),
-                        const SizedBox(height: Espaco.pequeno),
-                        BotaoSecundario(
-                          rotulo: 'Ligar para a clínica',
-                          aoTocar: () => ligarParaAClinica(context, telefone),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
           ],
         ),
       ),

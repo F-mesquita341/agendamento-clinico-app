@@ -1502,42 +1502,22 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('"Ligar para a clínica" liga para a clínica que a busca conhece, com o nome e o número', (
+    testWidgets('o Perfil e o "Como funciona" não listam telefones de clínicas, mesmo com a busca conhecendo uma', (
       tester,
     ) async {
       final autenticacao = AutenticacaoFalsa();
-      final abridor = AbridorDeLinksFalso();
-      await montar(tester, autenticacao, ApiFalsa(temPerfil: true), abridor: abridor);
+      // A busca do Início já trouxe a Clínica Exemplo Quixadá, com telefone.
+      await montar(tester, autenticacao, ApiFalsa(temPerfil: true));
       await sessao(tester, autenticacao, ana);
       await abrirAba(tester, 'Perfil');
 
-      await rolarAte(tester, find.text('Clínica Exemplo Quixadá · (88)\u00a03000-0000'));
-      await tocarEm(tester, 'Ligar para a clínica');
-      expect(abridor.ligacoes, ['(88) 3000-0000']);
-    });
-
-    testWidgets('sem telefone, a clínica fica de fora: nem no Perfil, nem no "Como funciona"', (tester) async {
-      final autenticacao = AutenticacaoFalsa();
-      final api = ApiFalsa(temPerfil: true);
-      api.forcadas['GET /profissionais'] = ApiFalsa.json(200, {
-        'profissionais': [
-          {
-            ...ApiFalsa.cardiologista,
-            'clinica': {'id': 1, 'nome': 'Clínica Exemplo Quixadá', 'telefone': null, 'endereco': null},
-          },
-        ],
-        'paginacao': {'pagina': 1, 'limite': 20, 'total': 1, 'paginas': 1},
-      });
-      await montar(tester, autenticacao, api);
-      await sessao(tester, autenticacao, ana);
-      await abrirAba(tester, 'Perfil');
-
-      await rolarAte(tester, find.text('Como funciona'));
       await rolarAte(tester, find.text('Sair da conta'));
       expect(find.text('Ligar para a clínica'), findsNothing);
+      expect(find.textContaining('3000-0000'), findsNothing);
       await tocar(tester, 'Como funciona');
       expect(find.text('Prefere falar com alguém?'), findsNothing);
       expect(find.text('Ligar para a clínica'), findsNothing);
+      expect(find.textContaining('3000-0000'), findsNothing);
     });
 
     testWidgets('"Como funciona": as sete perguntas, e as respostas dizem o que as telas dizem', (tester) async {
@@ -1569,10 +1549,6 @@ void main() {
       expect(find.textContaining('faça o pagamento antecipado'), findsNothing);
       await tocarEm(tester, 'Não recebi o lembrete. O que faço?');
       expect(find.textContaining('até 24 horas antes da consulta'), findsOneWidget);
-
-      await tocarEm(tester, 'Ligar para a clínica');
-      expect(find.text('Clínica Exemplo Quixadá · (88)\u00a03000-0000'), findsOneWidget);
-      expect(abridor.ligacoes, ['(88) 3000-0000']);
     });
   });
 

@@ -6,7 +6,6 @@ import '../../data/repositories/repositorio_do_catalogo.dart';
 import '../../data/services/preferencias_do_aparelho.dart';
 import '../../data/services/servico_de_localizacao.dart';
 import '../../domain/models/cidade.dart';
-import '../../domain/models/clinica.dart';
 import '../../domain/models/coordenadas.dart';
 import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
@@ -103,7 +102,6 @@ class BuscaViewModel extends ChangeNotifier {
   String _texto = '';
   String? _termo;
   List<Profissional> _profissionais = const [];
-  final _clinicas = <Clinica>[];
   int _total = 0;
   int _pagina = 1;
   bool _temMais = false;
@@ -194,12 +192,6 @@ class BuscaViewModel extends ChangeNotifier {
       ];
 
   List<Profissional> get profissionais => _profissionais;
-
-  /// As clínicas dos profissionais que a busca já mostrou, sem repetir: o
-  /// Perfil e o "Como funciona" dão o telefone delas (checklist, item 10.3).
-  /// A API não tem rota de clínica; ela vem dentro de cada profissional. A
-  /// lista só cresce: um filtro depois não apaga a clínica já conhecida.
-  List<Clinica> get clinicas => List.unmodifiable(_clinicas);
 
   /// Quantos profissionais a busca achou ao todo, somando as páginas.
   int get total => _total;
@@ -559,11 +551,6 @@ class BuscaViewModel extends ChangeNotifier {
     _pagina = pagina.pagina;
     _total = pagina.total;
     _temMais = pagina.temMais;
-    for (final Profissional(:clinica) in pagina.itens) {
-      if (clinica == null) continue;
-      final conhecida = _clinicas.any((outra) => outra.nome == clinica.nome && outra.telefone == clinica.telefone);
-      if (!conhecida) _clinicas.add(clinica);
-    }
   }
 
   /// Em "Perto de mim", do mais perto ao mais longe; quem não tem as
