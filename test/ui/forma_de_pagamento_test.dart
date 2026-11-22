@@ -285,6 +285,8 @@ void main() {
 
       expect(find.text('Como você vai pagar?'), findsOneWidget);
       expect(find.text('Pelo aplicativo, agora'), findsOneWidget);
+      // Desde a 2.1.0, o pagamento pelo aplicativo também é por Pix.
+      expect(find.text('Reserva de 15 minutos; pague por Pix ou pelo Mercado Pago.'), findsOneWidget);
       expect(find.text('Pelo plano de saúde'), findsOneWidget);
       expect(find.text('Na clínica, no dia da consulta'), findsOneWidget);
       expect(find.text('Escolha como pagar'), findsOneWidget);

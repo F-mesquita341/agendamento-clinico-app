@@ -193,7 +193,7 @@ class _ComoPagar extends StatelessWidget {
                   }),
                   subtitle: switch (forma) {
                     FormaDePagamento.app =>
-                      Text('Reserva de $minutosDeReserva minutos; o pagamento é no Mercado Pago.', style: apoio),
+                      Text('Reserva de $minutosDeReserva minutos; pague por Pix ou pelo Mercado Pago.', style: apoio),
                     FormaDePagamento.plano => Text('A clínica confere o plano no dia.', style: apoio),
                     FormaDePagamento.clinica => Text('A consulta fica confirmada agora.', style: apoio),
                   },
