@@ -2,6 +2,7 @@ import '../../domain/models/checkout.dart';
 import '../../domain/models/consulta.dart';
 import '../../domain/models/forma_de_pagamento.dart';
 import '../../domain/models/pagina.dart';
+import '../../domain/models/pix.dart';
 import '../services/api_client.dart';
 import 'leitura_json.dart';
 
@@ -39,6 +40,15 @@ abstract interface class RepositorioDeConsultas {
   /// consulta sem o horário e sem o profissional: quem a mostra guarda os que
   /// já tinha.
   Future<Consulta> cancelar(int id);
+
+  /// Abre — ou reaproveita — o Pix da consulta, em ambiente de teste. Pedir de
+  /// novo devolve o mesmo Pix enquanto ele estiver aberto. Na homologação com
+  /// o Pix desligado, a API responde 404 `ROTA_NAO_ENCONTRADA`.
+  Future<Pix> pagarComPix(int consultaId);
+
+  /// Pergunta à API se o Pix foi pago e devolve a consulta como ela está:
+  /// confirmada, ainda esperando, ou cancelada se o prazo venceu.
+  Future<Consulta> conferirPix(int consultaId);
 }
 
 /// As consultas vão sempre com o token da conta: são de quem está dentro.
@@ -100,6 +110,18 @@ class RepositorioDeConsultasRemoto implements RepositorioDeConsultas {
   @override
   Future<Consulta> cancelar(int id) async {
     final corpo = await _api.patch('/consultas/$id/cancelamento');
+    return lerObjeto(corpo, 'consulta', Consulta.fromJson);
+  }
+
+  @override
+  Future<Pix> pagarComPix(int consultaId) async {
+    final corpo = await _api.post('/consultas/$consultaId/pagamento/pix');
+    return lerObjeto(corpo, 'pix', Pix.fromJson);
+  }
+
+  @override
+  Future<Consulta> conferirPix(int consultaId) async {
+    final corpo = await _api.post('/consultas/$consultaId/pagamento/pix/conferir');
     return lerObjeto(corpo, 'consulta', Consulta.fromJson);
   }
 }

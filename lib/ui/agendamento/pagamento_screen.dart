@@ -22,6 +22,7 @@ import 'cartao_da_consulta.dart';
 import 'consulta_confirmada_screen.dart';
 import 'etapa_do_agendamento.dart';
 import 'pagamento_antecipado.dart';
+import 'pix_screen.dart';
 import 'reserva_view_model.dart';
 
 /// A tela do pagamento, aberta no lugar da grade e do resumo: voltar dela leva
@@ -69,6 +70,10 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
   late final AppLifecycleListener _ciclo;
   bool _seguiu = false;
 
+  /// A tela do Pix está aberta por cima: o que ela decidir chega pela volta
+  /// dela, e esta tela não leva a pessoa a lugar nenhum enquanto isso.
+  bool _naTelaDoPix = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,7 +94,7 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
   /// A situação decidida pela API leva a tela adiante, uma vez só: confirmada,
   /// para a confirmação; encerrada, para a folha que explica.
   void _reagir() {
-    if (!mounted || _seguiu) return;
+    if (!mounted || _seguiu || _naTelaDoPix) return;
     switch (_vm.situacao) {
       case SituacaoDoPagamento.confirmada:
         _seguiu = true;
@@ -147,15 +152,31 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
     };
     // Com a página de pagamento já aberta, a pessoa pode ter pago: sair não a
     // faz perder a consulta, e o diálogo não pode dar a entender que faz.
+    final comecou = _vm.abriuOCheckout || _vm.abriuOPix;
     final sai = await confirmar(
       context,
-      titulo: _vm.abriuOCheckout ? 'Sair do pagamento?' : 'Sair sem pagar?',
-      texto: '${_vm.abriuOCheckout ? 'Se você já pagou, a confirmação chega mesmo assim. Se não pagou, $reservado' : comInicialMaiuscula(reservado)} '
+      titulo: comecou ? 'Sair do pagamento?' : 'Sair sem pagar?',
+      texto: '${comecou ? 'Se você já pagou, a confirmação chega mesmo assim. Se não pagou, $reservado' : comInicialMaiuscula(reservado)} '
           'Para pagar depois, abra a consulta em Minhas consultas.',
       acao: 'Sair',
       desistir: 'Continuar pagamento',
     );
     if (sai && mounted) Navigator.of(context).popUntil((rota) => rota.isFirst);
+  }
+
+  /// Pede o Pix e abre a tela dele. A consulta que ela devolve — confirmada,
+  /// ou cancelada pelo prazo — é decidida aqui, como na volta da página do
+  /// Mercado Pago.
+  Future<void> _pagarComPix() async {
+    final pix = await _vm.pagarComPix();
+    if (pix == null || !mounted) return;
+    _naTelaDoPix = true;
+    final decidida = await Navigator.of(context).push(rotaDoPix(pix, _vm));
+    _naTelaDoPix = false;
+    if (!mounted) return;
+    if (decidida != null) _vm.aplicarDecisao(decidida);
+    // O que o relógio da reserva decidiu enquanto a tela do Pix estava aberta.
+    _reagir();
   }
 
   /// "Cancelar reserva" pergunta antes, com o mesmo diálogo dos detalhes da
@@ -190,7 +211,8 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
       ),
       const SizedBox(height: Espaco.grande),
       const PagamentoAntecipado(
-        complemento: 'Ele é feito na página do Mercado Pago, que abre a seguir. Depois de pagar, volte para o aplicativo.',
+        complemento: 'Ele é feito na página do Mercado Pago, com cartão, ou por Pix, com o QR Code ou o código. '
+            'Depois de pagar, volte para o aplicativo.',
       ),
     ];
     final acao = [
@@ -198,22 +220,33 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
         Aviso(tipo: TipoDeRetorno.erro, texto: erro),
         const SizedBox(height: Espaco.medio),
       ],
-      const _AmbienteDeTeste(),
+      const AmbienteDeTeste(),
       if (!acabou) ...[
         const SizedBox(height: Espaco.pequeno),
         BotaoPrincipal(
-          rotulo: vm.abriuOCheckout ? 'Abrir pagamento de novo' : 'Abrir o pagamento',
+          rotulo: vm.abriuOCheckout ? 'Abrir a página de novo' : 'Pagar na página do Mercado Pago',
           rotuloEnviando: switch (situacao) {
             SituacaoDoPagamento.abrindo => 'Abrindo o pagamento…',
+            SituacaoDoPagamento.abrindoPix => 'Abrindo o Pix…',
             SituacaoDoPagamento.cancelando => 'Cancelando a reserva…',
             _ => 'Conferindo o pagamento…',
           },
           enviando: situacao == SituacaoDoPagamento.abrindo ||
+              situacao == SituacaoDoPagamento.abrindoPix ||
               situacao == SituacaoDoPagamento.conferindo ||
               situacao == SituacaoDoPagamento.conferindoDepoisDoPrazo ||
               situacao == SituacaoDoPagamento.cancelando,
           aoTocar: vm.abrirPagamento,
         ),
+        // A alternativa: o Pix, em ambiente de teste. Some quando a API diz
+        // que ele está desligado; a página do Mercado Pago continua.
+        if (vm.podePagarComPix) ...[
+          const SizedBox(height: Espaco.pequeno),
+          BotaoSecundario(
+            rotulo: vm.abriuOPix ? 'Ver o Pix de novo' : 'Pagar com Pix',
+            aoTocar: vm.podeCancelarAReserva ? _pagarComPix : null,
+          ),
+        ],
         if (vm.podeCancelarAReserva) ...[
           const SizedBox(height: Espaco.pequeno),
           Center(
@@ -290,8 +323,9 @@ class _PagamentoScreenState extends State<PagamentoScreen> {
 /// Sempre à vista, no rodapé, junto do botão: nenhuma sessão desta pesquisa
 /// gera cobrança de verdade (TCC, pressuposto 2). No meio da lista, a nota da
 /// volta sem confirmação o empurrava para fora da tela (portão de 20/10).
-class _AmbienteDeTeste extends StatelessWidget {
-  const _AmbienteDeTeste();
+/// Também na tela do Pix.
+class AmbienteDeTeste extends StatelessWidget {
+  const AmbienteDeTeste({super.key});
 
   @override
   Widget build(BuildContext context) {

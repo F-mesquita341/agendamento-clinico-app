@@ -9,6 +9,7 @@ import '../../domain/models/data_civil.dart';
 import '../../domain/models/erro_da_api.dart';
 import '../../domain/models/horario.dart';
 import '../../domain/models/instante.dart';
+import '../../domain/models/pix.dart';
 import '../../domain/models/profissional.dart';
 import '../comum/defeitos.dart';
 import '../consultas/cancelamento.dart';
@@ -20,6 +21,9 @@ enum SituacaoDoPagamento {
 
   /// Pedindo a página de pagamento e abrindo a aba.
   abrindo,
+
+  /// Pedindo o Pix à API.
+  abrindoPix,
 
   /// A aba de pagamento foi aberta; a pessoa está lá, ou acabou de voltar.
   noCheckout,
@@ -110,6 +114,8 @@ class ReservaViewModel extends ChangeNotifier {
   Consulta? _confirmada;
   MotivoDoCancelamento? _motivoDoFim;
   bool _abriuOCheckout = false;
+  bool _abriuOPix = false;
+  bool _pixIndisponivel = false;
   bool _pagamentoTalvezFeito = false;
   int _conferencias = 0;
 
@@ -143,6 +149,17 @@ class ReservaViewModel extends ChangeNotifier {
   /// O checkout já foi aberto nesta tela: o botão vira "Abrir pagamento de
   /// novo".
   bool get abriuOCheckout => _abriuOCheckout;
+
+  /// Um Pix foi aberto nesta tela: a pessoa pode tê-lo pago, e o fim do prazo
+  /// pergunta à API antes de dar a reserva como vencida.
+  bool get abriuOPix => _abriuOPix;
+
+  /// "Pagar com Pix" só aparece enquanto a API não disse que o Pix está
+  /// desligado (404 `ROTA_NAO_ENCONTRADA`, na homologação).
+  bool get podePagarComPix => !_pixIndisponivel;
+
+  /// O que a tela diz quando a API responde que o Pix está desligado.
+  static const pixIndisponivel = 'O pagamento por Pix não está disponível agora. Use a página do Mercado Pago.';
 
   /// Hoje, na clínica.
   DataCivil get hoje => DataCivil.naClinica(relogio());
@@ -178,6 +195,7 @@ class ReservaViewModel extends ChangeNotifier {
 
   bool get _ocupado => switch (_situacao) {
         SituacaoDoPagamento.abrindo ||
+        SituacaoDoPagamento.abrindoPix ||
         SituacaoDoPagamento.conferindo ||
         SituacaoDoPagamento.conferindoDepoisDoPrazo ||
         SituacaoDoPagamento.cancelando ||
@@ -233,6 +251,56 @@ class ReservaViewModel extends ChangeNotifier {
     // não no próximo toque (revisão de 19/10, P4). Se abriu, é na volta.
     if (prazoPassou && _situacao != SituacaoDoPagamento.noCheckout) _aoVencerOPrazo();
     _notificar();
+  }
+
+  /// Pede o Pix à API e o devolve, para a tela do Pix mostrar. Pedir de novo
+  /// devolve o mesmo Pix enquanto ele estiver aberto. Ocupado, não faz nada.
+  /// As recusas ficam nesta tela, como as da página do Mercado Pago: o 404
+  /// `ROTA_NAO_ENCONTRADA` (o Pix desligado) tira o botão, e as outras recusas
+  /// relêem a consulta e deixam o status decidir.
+  Future<Pix?> pagarComPix() async {
+    if (_ocupado || _pixIndisponivel) return null;
+    final antes = _situacao;
+    _situacao = SituacaoDoPagamento.abrindoPix;
+    _erro = null;
+    _notificar();
+
+    Pix? pix;
+    try {
+      pix = await _aviso.acompanhar(() => _consultas.pagarComPix(consulta.id));
+      if (_descartado) return null;
+      _abriuOPix = true;
+      _situacao = antes;
+    } on ErroDaApi catch (erro) {
+      if (_descartado) return null;
+      if (erro.status == 404 && erro.codigo == 'ROTA_NAO_ENCONTRADA') {
+        _pixIndisponivel = true;
+        _situacao = antes;
+        _erro = pixIndisponivel;
+      } else if (erro.status >= 400 && erro.status < 500) {
+        await _decidirPeloStatus(seNaoDecidir: erro.mensagem, antes: antes);
+      } else {
+        _situacao = antes;
+        _erro = erro.mensagem;
+      }
+    } catch (erro, pilha) {
+      relatarDefeito(erro, pilha, 'ao pedir o Pix');
+      if (_descartado) return null;
+      _situacao = antes;
+      _erro = const ErroDaApi.falhaNoAplicativo().mensagem;
+    }
+    // O prazo pode ter vencido com o pedido no ar, como em [abrirPagamento].
+    if (prazoPassou && _situacao != SituacaoDoPagamento.noCheckout) _aoVencerOPrazo();
+    _notificar();
+    return _situacao == antes || _situacao == SituacaoDoPagamento.noCheckout ? pix : null;
+  }
+
+  /// A consulta que a tela do Pix recebeu da API ao parar de esperar —
+  /// confirmada, ou cancelada pelo prazo. Quem decide o que vem depois é esta
+  /// tela, como na volta da página do Mercado Pago.
+  void aplicarDecisao(Consulta lida) {
+    if (_descartado) return;
+    if (_aplicar(lida)) _notificar();
   }
 
   /// "Cancelar reserva" vale quando a tela não está fazendo outra coisa nem
@@ -369,7 +437,7 @@ class ReservaViewModel extends ChangeNotifier {
     // O erro da última tentativa de abrir a página não vale mais: agora é o
     // prazo que fala.
     _erro = null;
-    if (!_abriuOCheckout) {
+    if (!_abriuOCheckout && !_abriuOPix) {
       _situacao = SituacaoDoPagamento.encerrada;
       _encerrarConferencias();
       _notificar();

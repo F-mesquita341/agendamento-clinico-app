@@ -427,4 +427,86 @@ void main() {
       );
     });
   });
+
+  group('Pix (versão 2, ambiente de teste)', () {
+    // Os 4 bytes do começo de um PNG, em base64: basta para a leitura.
+    const pix = {
+      'copiaECola': '00020126580014br.gov.bcb.pix0136teste',
+      'qrCodeBase64': 'iVBORw==',
+      'expiraEm': '2026-10-19T12:15:00.000Z',
+      'valorCentavos': 25000,
+      'valorFormatado': 'R\$ 250,00',
+    };
+
+    test('pede o Pix da consulta, sem corpo, com o token da conta', () async {
+      await consultas({'pix': pix}, status: 201).pagarComPix(31);
+
+      final pedido = pedidos.single;
+      expect(pedido.method, 'POST');
+      expect(pedido.url.path, '/consultas/31/pagamento/pix');
+      expect(pedido.body, isEmpty);
+      expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
+    });
+
+    test('lê o código, a imagem, o prazo em UTC e o valor — 201 e 200 dão o mesmo', () async {
+      for (final status in [201, 200]) {
+        final lido = await consultas({'pix': pix}, status: status).pagarComPix(31);
+
+        expect(lido.copiaECola, '00020126580014br.gov.bcb.pix0136teste');
+        expect(lido.qrCode, [0x89, 0x50, 0x4E, 0x47]);
+        expect(lido.expiraEm, DateTime.utc(2026, 10, 19, 12, 15));
+        expect(lido.valorFormatado, 'R\$ 250,00');
+      }
+    });
+
+    test('a imagem que não decodifica, ou vazia, não impede: fica só o código', () async {
+      for (final imagem in ['isto não é base64!', '']) {
+        final lido = await consultas({
+          'pix': {...pix, 'qrCodeBase64': imagem},
+        }, status: 201)
+            .pagarComPix(31);
+
+        expect(lido.qrCode, isNull, reason: imagem);
+        expect(lido.copiaECola, isNotEmpty);
+      }
+    });
+
+    test('sem o código, ou com um campo de outro tipo, é resposta fora do formato', () async {
+      for (final errado in <Map<String, Object?>>[
+        {...pix, 'copiaECola': ''},
+        {...pix, 'copiaECola': 123},
+        {...pix, 'qrCodeBase64': null},
+        {...pix, 'valorFormatado': 25000},
+        {...pix, 'expiraEm': 'amanhã'},
+      ]) {
+        await expectLater(consultas({'pix': errado}, status: 201).pagarComPix(31), respostaInesperada, reason: '$errado');
+      }
+    });
+
+    test('o Pix desligado na homologação chega como 404 ROTA_NAO_ENCONTRADA', () async {
+      final repositorio = consultas({
+        'erro': {'codigo': 'ROTA_NAO_ENCONTRADA', 'mensagem': 'Rota não encontrada.'},
+      }, status: 404);
+
+      await expectLater(
+        repositorio.pagarComPix(31),
+        throwsA(isA<ErroDaApi>()
+            .having((e) => e.status, 'status', 404)
+            .having((e) => e.codigo, 'codigo', 'ROTA_NAO_ENCONTRADA')),
+      );
+    });
+
+    test('conferir pede a consulta pela rota do Pix e lê o status', () async {
+      final consulta = await consultas({
+        'consulta': {...reservada, 'status': 'confirmada', 'reservaExpiraEm': null},
+      }).conferirPix(31);
+
+      final pedido = pedidos.single;
+      expect(pedido.method, 'POST');
+      expect(pedido.url.path, '/consultas/31/pagamento/pix/conferir');
+      expect(pedido.body, isEmpty);
+      expect(pedido.headers['Authorization'], 'Bearer token-de-teste');
+      expect(consulta.status, StatusDaConsulta.confirmada);
+    });
+  });
 }

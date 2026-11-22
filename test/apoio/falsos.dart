@@ -19,6 +19,7 @@ import 'package:agendamento_clinico/domain/models/dados_do_paciente.dart';
 import 'package:agendamento_clinico/domain/models/data_civil.dart';
 import 'package:agendamento_clinico/domain/models/especialidade.dart';
 import 'package:agendamento_clinico/domain/models/forma_de_pagamento.dart';
+import 'package:agendamento_clinico/domain/models/pix.dart';
 import 'package:agendamento_clinico/domain/models/horario.dart';
 import 'package:agendamento_clinico/domain/models/paciente.dart';
 import 'package:agendamento_clinico/domain/models/pagina.dart';
@@ -335,17 +336,23 @@ class ConsultasFalso implements RepositorioDeConsultas {
     Iterable<Object?> consulta = const [],
     Iterable<Object?> pagar = const [],
     Iterable<Object?> cancelar = const [],
+    Iterable<Object?> pagarComPix = const [],
+    Iterable<Object?> conferirPix = const [],
   })  : respostasDeAgendar = Fila(agendar),
         respostasDeMinhas = Fila(minhas),
         respostasDeConsulta = Fila(consulta),
         respostasDePagar = Fila(pagar),
-        respostasDeCancelar = Fila(cancelar);
+        respostasDeCancelar = Fila(cancelar),
+        respostasDePagarComPix = Fila(pagarComPix),
+        respostasDeConferirPix = Fila(conferirPix);
 
   final Fila respostasDeAgendar;
   final Fila respostasDeMinhas;
   final Fila respostasDeConsulta;
   final Fila respostasDePagar;
   final Fila respostasDeCancelar;
+  final Fila respostasDePagarComPix;
+  final Fila respostasDeConferirPix;
   final pedidosDeAgendar = <({int horarioId, int versao})>[];
 
   /// A forma e o plano de cada agendamento (versão 2), na mesma ordem de
@@ -355,6 +362,8 @@ class ConsultasFalso implements RepositorioDeConsultas {
   final pedidosDeConsulta = <int>[];
   final pedidosDePagar = <int>[];
   final pedidosDeCancelar = <int>[];
+  final pedidosDePagarComPix = <int>[];
+  final pedidosDeConferirPix = <int>[];
 
   @override
   Future<Consulta> agendar({
@@ -390,6 +399,18 @@ class ConsultasFalso implements RepositorioDeConsultas {
   Future<Consulta> cancelar(int id) {
     pedidosDeCancelar.add(id);
     return respostasDeCancelar.proxima<Consulta>();
+  }
+
+  @override
+  Future<Pix> pagarComPix(int consultaId) {
+    pedidosDePagarComPix.add(consultaId);
+    return respostasDePagarComPix.proxima<Pix>();
+  }
+
+  @override
+  Future<Consulta> conferirPix(int consultaId) {
+    pedidosDeConferirPix.add(consultaId);
+    return respostasDeConferirPix.proxima<Consulta>();
   }
 }
 

@@ -990,7 +990,7 @@ void main() {
     expect(find.text('Ambiente de teste: nenhum valor real é cobrado.').hitTestable(), findsOneWidget);
 
     // A página do Mercado Pago, pedida com o token, aberta na aba.
-    await tester.tap(find.text('Abrir o pagamento'));
+    await tester.tap(find.text('Pagar na página do Mercado Pago'));
     await tester.pump();
     await tester.pump();
     final pedido = api.pedidosA('POST', '/consultas/90/pagamento').single;

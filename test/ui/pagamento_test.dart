@@ -70,8 +70,8 @@ ReservaViewModel reservaVm(Consulta consulta) => ReservaViewModel(
     );
 
 const tituloDaFolha = 'A reserva expirou';
-const abrirPagamento = 'Abrir o pagamento';
-const abrirDeNovo = 'Abrir pagamento de novo';
+const abrirPagamento = 'Pagar na página do Mercado Pago';
+const abrirDeNovo = 'Abrir a página de novo';
 const ambienteDeTeste = 'Ambiente de teste: nenhum valor real é cobrado.';
 
 void main() {
@@ -283,8 +283,8 @@ void main() {
       expect(find.text('Amanhã, quinta-feira, 15/10 · 14:30'), findsOneWidget);
       expect(find.text('R\$\u00a0200,00'), findsOneWidget);
       expect(
-        find.text('O pagamento antecipado garante o seu horário. Ele é feito na página do Mercado Pago, que abre a '
-            'seguir. Depois de pagar, volte para o aplicativo.'),
+        find.text('O pagamento antecipado garante o seu horário. Ele é feito na página do Mercado Pago, com cartão, '
+            'ou por Pix, com o QR Code ou o código. Depois de pagar, volte para o aplicativo.'),
         findsOneWidget,
       );
       expect(find.text(ambienteDeTeste), findsOneWidget);
@@ -458,7 +458,7 @@ void main() {
       expect(find.text('Consulta confirmada'), findsOneWidget);
     });
 
-    testWidgets('"Abrir pagamento de novo" reabre a mesma página', (tester) async {
+    testWidgets('"Abrir a página de novo" reabre a mesma página', (tester) async {
       await abrir(
         tester,
         reserva(),
